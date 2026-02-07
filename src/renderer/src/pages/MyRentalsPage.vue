@@ -45,7 +45,10 @@ async function handleRelease(): Promise<void> {
 onMounted(async () => {
   await accountsStore.fetchAccounts()
   if (auth.user) await rentalsStore.fetchMyRentals(auth.user.id)
-  timerInterval = setInterval(updateTimer, 1000)
+  timerInterval = setInterval(() => {
+    updateTimer()
+    rentalsStore.checkAndExpireRentals()
+  }, 1000)
   updateTimer()
 })
 
@@ -92,7 +95,11 @@ onUnmounted(() => { if (timerInterval) clearInterval(timerInterval) })
         </div>
 
         <div class="grid grid-cols-2 gap-3">
-          <button class="h-11 rounded-lg bg-accent hover:bg-accent-hover text-sm font-semibold text-white flex items-center justify-center gap-2 transition-colors">
+          <button
+            class="h-11 rounded-lg bg-accent/50 text-sm font-semibold text-white/60 flex items-center justify-center gap-2 cursor-not-allowed"
+            title="Auto-login próximamente"
+            disabled
+          >
             <Play class="w-4 h-4" />
             Iniciar Sesión
           </button>

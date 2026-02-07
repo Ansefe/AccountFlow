@@ -73,6 +73,33 @@ export const useRentalsStore = defineStore('rentals', () => {
     return { error: null, rental }
   }
 
+  async function checkAndExpireRentals(): Promise<void> {
+    const now = Date.now()
+    const expiredRentals = rentals.value.filter(
+      r => r.status === 'active' && new Date(r.expires_at).getTime() <= now
+    )
+
+    for (const rental of expiredRentals) {
+      const { error: rentalErr } = await supabase
+        .from('rentals')
+        .update({ status: 'expired', ended_at: new Date().toISOString() })
+        .eq('id', rental.id)
+        .eq('status', 'active')
+
+      if (!rentalErr) {
+        await supabase
+          .from('accounts')
+          .update({ current_rental_id: null })
+          .eq('id', rental.account_id)
+
+        const idx = rentals.value.findIndex(r => r.id === rental.id)
+        if (idx !== -1) {
+          rentals.value[idx] = { ...rentals.value[idx], status: 'expired', ended_at: new Date().toISOString() }
+        }
+      }
+    }
+  }
+
   async function endRental(rentalId: string, accountId: string): Promise<{ error: string | null }> {
     const { error: err } = await supabase
       .from('rentals')
@@ -127,6 +154,7 @@ export const useRentalsStore = defineStore('rentals', () => {
     fetchMyRentals,
     startRental,
     endRental,
+    checkAndExpireRentals,
     subscribeToChanges
   }
 })

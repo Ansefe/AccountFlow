@@ -1,14 +1,22 @@
 <script setup lang="ts">
-import { Search, Bell, Coins, ChevronDown } from 'lucide-vue-next'
+import { ref } from 'vue'
+import { Coins, ChevronDown, LogOut, Settings } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@renderer/stores/auth.store'
 
 const router = useRouter()
 const auth = useAuthStore()
+const showUserMenu = ref(false)
 
 defineProps<{
   title: string
 }>()
+
+async function handleLogout(): Promise<void> {
+  showUserMenu.value = false
+  await auth.signOut()
+  router.push('/login')
+}
 </script>
 
 <template>
@@ -17,13 +25,6 @@ defineProps<{
     <h1 class="text-lg font-bold text-text-primary">{{ title }}</h1>
 
     <div class="flex-1" />
-
-    <!-- Search -->
-    <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface border border-border-default mr-4 w-56 cursor-pointer hover:border-border-hover transition-colors">
-      <Search class="w-4 h-4 text-text-muted" />
-      <span class="text-sm text-text-muted">Buscar...</span>
-      <span class="ml-auto text-[10px] text-text-muted bg-bg-secondary px-1.5 py-0.5 rounded font-mono">(3K)</span>
-    </div>
 
     <!-- Credits -->
     <div
@@ -34,18 +35,46 @@ defineProps<{
       <span class="text-base font-bold font-mono text-text-primary">{{ auth.totalCredits }}</span>
     </div>
 
-    <!-- Notifications -->
-    <button class="relative p-2 rounded-lg hover:bg-surface-hover transition-colors mr-2">
-      <Bell class="w-4.5 h-4.5 text-text-secondary" />
-      <div class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-error"></div>
-    </button>
+    <!-- Avatar + Dropdown -->
+    <div class="relative">
+      <button
+        class="flex items-center gap-1.5 cursor-pointer rounded-lg px-2 py-1.5 hover:bg-surface-hover transition-colors"
+        @click="showUserMenu = !showUserMenu"
+      >
+        <div class="w-8 h-8 rounded-full bg-accent/30 flex items-center justify-center text-xs font-bold text-accent">
+          {{ auth.displayName.charAt(0).toUpperCase() }}
+        </div>
+        <span class="text-sm font-medium text-text-primary hidden xl:inline">{{ auth.displayName }}</span>
+        <ChevronDown class="w-3.5 h-3.5 text-text-muted" />
+      </button>
 
-    <!-- Avatar -->
-    <div class="flex items-center gap-1.5 cursor-pointer">
-      <div class="w-8 h-8 rounded-full bg-accent/30 flex items-center justify-center text-xs font-bold text-accent">
-        {{ auth.displayName.charAt(0).toUpperCase() }}
+      <!-- Dropdown -->
+      <div
+        v-if="showUserMenu"
+        class="absolute right-0 top-full mt-1 w-48 rounded-xl bg-surface border border-border-default shadow-2xl py-1 z-50"
+      >
+        <div class="px-3 py-2 border-b border-border-default">
+          <div class="text-sm font-medium text-text-primary truncate">{{ auth.displayName }}</div>
+          <div class="text-[11px] text-text-muted truncate">{{ auth.user?.email }}</div>
+        </div>
+        <button
+          class="flex items-center gap-2 w-full px-3 py-2 text-sm text-text-secondary hover:bg-surface-hover transition-colors"
+          @click="showUserMenu = false; router.push('/settings')"
+        >
+          <Settings class="w-3.5 h-3.5" />
+          Ajustes
+        </button>
+        <button
+          class="flex items-center gap-2 w-full px-3 py-2 text-sm text-error hover:bg-error/10 transition-colors"
+          @click="handleLogout"
+        >
+          <LogOut class="w-3.5 h-3.5" />
+          Cerrar sesión
+        </button>
       </div>
-      <ChevronDown class="w-3.5 h-3.5 text-text-muted" />
+
+      <!-- Click-away overlay -->
+      <div v-if="showUserMenu" class="fixed inset-0 z-40" @click="showUserMenu = false"></div>
     </div>
   </header>
 </template>

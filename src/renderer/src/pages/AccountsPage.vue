@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { Search, Filter, Lock, Shield } from 'lucide-vue-next'
+import { Search, Filter, Lock, Shield, X } from 'lucide-vue-next'
 import { useAccountsStore } from '@renderer/stores/accounts.store'
 import RentalModal from '@renderer/components/RentalModal.vue'
 import type { AccountPublic } from '@renderer/types/database'
@@ -9,12 +9,50 @@ const accountsStore = useAccountsStore()
 const searchQuery = ref('')
 const selectedAccount = ref<AccountPublic | null>(null)
 
+const filterElo = ref<string>('')
+const filterServer = ref<string>('')
+const filterStatus = ref<string>('')
+
+const elos = ['Iron', 'Bronze', 'Silver', 'Gold', 'Platinum', 'Emerald', 'Diamond', 'Master', 'Grandmaster', 'Challenger']
+const servers = ['NA', 'EUW', 'EUNE', 'LAN', 'LAS', 'BR', 'KR', 'JP', 'OCE', 'TR', 'RU']
+
+const hasFilters = computed(() => !!filterElo.value || !!filterServer.value || !!filterStatus.value)
+
+function clearFilters(): void {
+  filterElo.value = ''
+  filterServer.value = ''
+  filterStatus.value = ''
+}
+
 const filteredAccounts = computed(() => {
+  let result = accountsStore.accounts
+
   const q = searchQuery.value.toLowerCase()
-  if (!q) return accountsStore.accounts
-  return accountsStore.accounts.filter(a =>
-    a.name.toLowerCase().includes(q) || a.riot_username.toLowerCase().includes(q)
-  )
+  if (q) {
+    result = result.filter(a =>
+      a.name.toLowerCase().includes(q) || a.riot_username.toLowerCase().includes(q)
+    )
+  }
+
+  if (filterElo.value) {
+    result = result.filter(a => a.elo === filterElo.value)
+  }
+
+  if (filterServer.value) {
+    result = result.filter(a => a.server === filterServer.value)
+  }
+
+  if (filterStatus.value) {
+    if (filterStatus.value === 'available') {
+      result = result.filter(a => !a.current_rental_id && !a.is_banned && a.status === 'active')
+    } else if (filterStatus.value === 'occupied') {
+      result = result.filter(a => !!a.current_rental_id)
+    } else if (filterStatus.value === 'banned') {
+      result = result.filter(a => a.is_banned)
+    }
+  }
+
+  return result
 })
 
 onMounted(() => {
@@ -64,17 +102,36 @@ const eloBgColors: Record<string, string> = {
           class="bg-transparent text-sm text-text-primary placeholder:text-text-muted outline-none w-full"
         />
       </div>
-      <button class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface border border-border-default text-sm text-text-secondary hover:bg-surface-hover transition-colors">
-        <Filter class="w-4 h-4" />
-        Elo
-      </button>
-      <button class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface border border-border-default text-sm text-text-secondary hover:bg-surface-hover transition-colors">
-        <Filter class="w-4 h-4" />
-        Server
-      </button>
-      <button class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface border border-border-default text-sm text-text-secondary hover:bg-surface-hover transition-colors">
-        <Filter class="w-4 h-4" />
-        Estado
+      <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface border border-border-default">
+        <Filter class="w-4 h-4 text-text-muted shrink-0" />
+        <select v-model="filterElo" class="bg-transparent text-sm text-text-secondary outline-none cursor-pointer">
+          <option value="">Todos los Elos</option>
+          <option v-for="e in elos" :key="e" :value="e">{{ e }}</option>
+        </select>
+      </div>
+      <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface border border-border-default">
+        <Filter class="w-4 h-4 text-text-muted shrink-0" />
+        <select v-model="filterServer" class="bg-transparent text-sm text-text-secondary outline-none cursor-pointer">
+          <option value="">Todos los Servers</option>
+          <option v-for="s in servers" :key="s" :value="s">{{ s }}</option>
+        </select>
+      </div>
+      <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface border border-border-default">
+        <Filter class="w-4 h-4 text-text-muted shrink-0" />
+        <select v-model="filterStatus" class="bg-transparent text-sm text-text-secondary outline-none cursor-pointer">
+          <option value="">Todos los Estados</option>
+          <option value="available">Disponible</option>
+          <option value="occupied">En uso</option>
+          <option value="banned">Baneada</option>
+        </select>
+      </div>
+      <button
+        v-if="hasFilters"
+        class="flex items-center gap-1 px-2 py-2 rounded-lg text-xs text-text-muted hover:text-error hover:bg-error/10 transition-colors"
+        @click="clearFilters"
+      >
+        <X class="w-3.5 h-3.5" />
+        Limpiar
       </button>
     </div>
 

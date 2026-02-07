@@ -208,7 +208,8 @@ async function handleRent(): Promise<void> {
 
         <!-- Not enough credits warning -->
         <div v-if="selectedOption && !canAfford" class="p-3 rounded-lg bg-warning/10 border border-warning/30 text-sm text-warning">
-          No tienes suficientes créditos. <a class="underline cursor-pointer font-medium">Comprar créditos</a>
+          No tienes suficientes créditos.
+          <a class="underline cursor-pointer font-medium" @click="emit('close'); $router.push('/credits')">Comprar créditos</a>
         </div>
 
         <!-- Action Button -->

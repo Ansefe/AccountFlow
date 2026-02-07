@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, computed, ref, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Coins, Shield, Clock, UserPlus, RefreshCw, History, Headphones, Play, Unlock } from 'lucide-vue-next'
+import { Coins, Shield, UserPlus, RefreshCw, History, Headphones, Play, Unlock } from 'lucide-vue-next'
 import { useAuthStore } from '@renderer/stores/auth.store'
 import { useAccountsStore } from '@renderer/stores/accounts.store'
 import { useRentalsStore } from '@renderer/stores/rentals.store'
@@ -52,13 +52,20 @@ onMounted(async () => {
     rentalsStore.subscribeToChanges(auth.user.id)
   }
   accountsStore.subscribeToChanges()
-  timerInterval = setInterval(updateTimer, 1000)
+  timerInterval = setInterval(() => {
+    updateTimer()
+    rentalsStore.checkAndExpireRentals()
+  }, 1000)
   updateTimer()
 })
 
 onUnmounted(() => {
   if (timerInterval) clearInterval(timerInterval)
 })
+
+function openSupport(): void {
+  window.open('https://discord.gg/', '_blank')
+}
 
 async function handleRelease(): Promise<void> {
   if (!activeRental.value || !activeAccount.value) return
@@ -117,7 +124,11 @@ async function handleRelease(): Promise<void> {
             </div>
 
             <div class="grid grid-cols-2 gap-2">
-              <button class="h-9 rounded-lg bg-accent hover:bg-accent-hover text-xs font-semibold text-white flex items-center justify-center gap-1.5 transition-colors">
+              <button
+                class="h-9 rounded-lg bg-accent/50 text-xs font-semibold text-white/60 flex items-center justify-center gap-1.5 cursor-not-allowed"
+                title="Auto-login próximamente"
+                disabled
+              >
                 <Play class="w-3.5 h-3.5" />
                 Iniciar
               </button>
@@ -173,7 +184,7 @@ async function handleRelease(): Promise<void> {
           <span class="text-xs font-medium text-text-secondary group-hover:text-text-primary transition-colors">Historial</span>
         </button>
 
-        <button class="flex flex-col items-center gap-2 p-4 rounded-xl bg-surface border border-border-default hover:border-border-hover hover:bg-surface-hover transition-all group">
+        <button class="flex flex-col items-center gap-2 p-4 rounded-xl bg-surface border border-border-default hover:border-border-hover hover:bg-surface-hover transition-all group" @click="openSupport">
           <div class="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center group-hover:bg-success/20 transition-colors">
             <Headphones class="w-5 h-5 text-success" />
           </div>
