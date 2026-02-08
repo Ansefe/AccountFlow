@@ -1,0 +1,31 @@
+# Renew expired subscriptions daily at 00:05 UTC
+# Replaces pg_cron (not available on Supabase Free tier)
+# Set repository secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+name: Renew Subscriptions
+
+on:
+  schedule:
+    - cron: '5 0 * * *' # 00:05 UTC daily
+  workflow_dispatch: # Allow manual trigger from GitHub Actions UI
+
+jobs:
+  renew:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call renew-subscriptions Edge Function
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "${{ secrets.SUPABASE_URL }}/functions/v1/renew-subscriptions" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "Status: $HTTP_CODE"
+          echo "Response: $BODY"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Renewal failed with status $HTTP_CODE"
+            exit 1
+          fi

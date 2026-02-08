@@ -27,12 +27,13 @@
 | Dato | Valor |
 |------|-------|
 | **Stack** | Electron 39 + Vue 3 + TypeScript + TailwindCSS 4 + Pinia 3 + Supabase |
-| **Build** | Limpio, 0 errores, ~1788 módulos |
-| **Fase actual** | Fase 1 completa + correcciones post-MVP en curso |
+| **Build** | Limpio, 0 errores, ~1789 módulos |
+| **Fase actual** | Fase 1 completa + Stripe integrado + correcciones post-MVP |
 | **Páginas** | 11 (Login, Register, Dashboard, Accounts, MyRentals, Credits, Settings, Admin ×4) |
 | **Stores** | 4 (auth, accounts, rentals, admin) |
 | **Rutas** | 11 con guards de auth y admin |
-| **Migraciones SQL** | 2 (001_initial_schema + 002_early_bird_pgcron) |
+| **Migraciones SQL** | 3 (001_initial_schema + 002_early_bird_pgcron + 003_stripe_integration) |
+| **Edge Functions** | 5 (create-checkout, stripe-webhook, customer-portal, renew-subscriptions, payment-result) |
 
 ---
 
@@ -79,6 +80,28 @@
 - [x] Early Bird: $6/mes, 1000 créditos, badge "40% OFF · Tiempo limitado"
 - [x] Plan cards en SettingsPage con feedback visual
 
+#### Pagos y Stripe
+- [x] Integración Stripe Checkout para suscripciones (early_bird, basic, unlimited)
+- [x] Integración Stripe Checkout para compra de créditos (paquetes)
+- [x] Edge Function `create-checkout` (crea sesiones de Stripe Checkout)
+- [x] Edge Function `stripe-webhook` (procesa eventos: checkout.session.completed, invoice.paid, customer.subscription.deleted, invoice.payment_failed)
+- [x] Edge Function `customer-portal` (URL del portal de facturación Stripe)
+- [x] Edge Function `payment-result` (página HTML de resultado post-pago)
+- [x] Edge Function `renew-subscriptions` (alternativa a pg_cron para Free tier)
+- [x] GitHub Actions workflow `renew-subscriptions.yml` (cron diario 00:05 UTC)
+- [x] SQL migration 003: funciones server-side (activate_subscription, handle_subscription_renewal, cancel_subscription, add_purchased_credits)
+- [x] IPC `shell:openExternal` para abrir URLs de Stripe en el navegador
+- [x] Stripe Customer Portal para gestionar/cancelar suscripción
+- [x] Polling de perfil cada 5s en SettingsPage y CreditsPage (detectar cambios post-pago)
+- [x] Validación: requiere plan activo para comprar créditos
+- [x] Validación: Unlimited no puede comprar créditos
+- [x] Columnas `stripe_subscription_id` en profiles, `stripe_price_id` en credit_packages
+
+#### Reglas de Negocio Corregidas
+- [x] Orden de créditos: subscription se gasta primero, luego purchased
+- [x] Unlimited: sin créditos, alquiler directo ilimitado ($30/mes pago con Stripe)
+- [x] Requiere plan activo para comprar créditos extra
+
 #### Base de Datos
 - [x] 8 tablas: profiles, accounts, rentals, credit_transactions, payments, credit_packages, activity_log, app_settings
 - [x] Todos los enums definidos
@@ -97,17 +120,20 @@
 
 ### ⚠️ Parcialmente Implementado
 - [ ] Discord OAuth — Código listo, pero requiere configuración manual en Discord Developer Portal + Supabase
-- [ ] Pagos — UI de paquetes de créditos existe, pero sin integración de pasarela (Stripe pendiente)
+- [ ] Stripe — Código completo (Edge Functions + frontend), requiere configuración manual:
+  - Crear productos/precios en Stripe Dashboard
+  - Configurar webhook endpoint
+  - Setear secrets en Supabase (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_*)
+  - Actualizar `stripe_price_id` en credit_packages
 - [ ] Riot Client path — Campo existe en Settings, pero no se guarda ni se utiliza aún
+- [ ] pg_cron alternativa — Edge Function + GitHub Actions listos, requieren setear secrets en GitHub repo
 
 ### ❌ No Implementado Aún
 - [ ] Auto-login LoL (nut.js)
 - [ ] Heartbeat system
-- [ ] Stripe integration
 - [ ] Riot API sync
 - [ ] Auto-updates (electron-updater)
 - [ ] Notificaciones in-app
-- [ ] Edge Functions de Supabase
 
 ---
 
@@ -120,14 +146,25 @@ accountflow/
 │   ├── ui-spec.md                       # Especificación UI/UX
 │   └── progress.md                      # Este documento
 │
+├── .github/
+│   └── workflows/
+│       └── renew-subscriptions.yml      # Cron diario — alternativa a pg_cron
+│
 ├── supabase/
-│   └── migrations/
-│       ├── 001_initial_schema.sql       # Schema completo (8 tablas, RLS, triggers, seed)
-│       └── 002_early_bird_pgcron.sql    # early_bird enum, pg_cron, change_user_plan RPC
+│   ├── migrations/
+│   │   ├── 001_initial_schema.sql       # Schema completo (8 tablas, RLS, triggers, seed)
+│   │   ├── 002_early_bird_pgcron.sql    # early_bird enum, pg_cron, change_user_plan RPC
+│   │   └── 003_stripe_integration.sql   # Stripe columns, server-side functions
+│   └── functions/
+│       ├── create-checkout/index.ts     # Crea sesiones de Stripe Checkout
+│       ├── stripe-webhook/index.ts      # Procesa webhooks de Stripe
+│       ├── customer-portal/index.ts     # URL del portal de facturación
+│       ├── renew-subscriptions/index.ts # Renueva suscripciones expiradas
+│       └── payment-result/index.ts      # Página HTML post-pago
 │
 ├── src/
-│   ├── main/index.ts                    # Electron Main Process (frameless window)
-│   ├── preload/index.ts                 # contextBridge + IPC tipado
+│   ├── main/index.ts                    # Electron Main Process (frameless window + shell IPC)
+│   ├── preload/index.ts                 # contextBridge + IPC tipado + shell.openExternal
 │   └── renderer/
 │       ├── index.html                   # CSP + Google Fonts
 │       └── src/
@@ -136,8 +173,9 @@ accountflow/
 │           ├── assets/main.css          # Tailwind + theme CSS variables
 │           ├── lib/
 │           │   ├── supabase.ts          # Cliente Supabase con fetchWithTimeout
+│           │   ├── stripe.ts            # Helpers: checkoutSubscription, checkoutCreditPackage, openCustomerPortal
 │           │   └── utils.ts             # cn() helper
-│           ├── types/database.ts        # Tipos TS del schema
+│           ├── types/database.ts        # Tipos TS del schema (actualizado con stripe fields)
 │           ├── router/index.ts          # 11 rutas + guards
 │           ├── stores/
 │           │   ├── auth.store.ts        # Sesión, perfil, isUnlimited
@@ -196,8 +234,9 @@ accountflow/
 
 - **Créditos de suscripción** (`subscription_credits`): Se **resetean** (no acumulan) al día de renovación mensual.
 - **Créditos comprados** (`purchased_credits`): **Sí acumulan**, nunca expiran, se conservan independientemente del plan.
-- **Orden de consumo**: Primero se gastan créditos comprados (`purchased`), luego los de suscripción.
+- **Orden de consumo**: Primero se gastan créditos de suscripción (`subscription`), luego los comprados.
 - **Unlimited → otro plan**: Los créditos comprados que tenía se conservan. Los de suscripción del nuevo plan se suman.
+- **Requisito para comprar créditos**: Se debe tener un plan activo (early_bird o basic). Unlimited y sin plan no pueden comprar.
 - **Cualquier plan → Unlimited**: Deja de necesitar créditos. Los comprados que tenía se quedan (pero no puede comprar más).
 - **Cancelar plan** (→ `none`): `subscription_credits` se pone a 0. Los comprados se conservan.
 
@@ -254,11 +293,21 @@ En el frontend, filtrar `planOptions` por `visible: true` consultando `app_setti
 - Cron schedule: diario a las 00:05 UTC
 - Función `change_user_plan()` (SECURITY DEFINER, RPC)
 
+### Migración 003: `003_stripe_integration.sql`
+- `stripe_subscription_id` column en profiles
+- `stripe_price_id` column en credit_packages
+- Actualización de `app_settings.plans` con campos `stripe_price_id`
+- Function `activate_subscription()` (SECURITY DEFINER) — activa plan tras checkout
+- Function `handle_subscription_renewal()` (SECURITY DEFINER) — renueva créditos mensual
+- Function `cancel_subscription()` (SECURITY DEFINER) — cancela plan
+- Function `add_purchased_credits()` (SECURITY DEFINER) — agrega créditos tras compra
+
 ### Estado de ejecución
 | Migración | Estado |
 |-----------|--------|
 | 001_initial_schema.sql | ⚠️ Pendiente de ejecutar por el usuario en Supabase SQL Editor |
-| 002_early_bird_pgcron.sql | ⚠️ Pendiente de ejecutar por el usuario en Supabase SQL Editor |
+| 002_early_bird_pgcron.sql | ⚠️ Pendiente — **comentar las líneas de pg_cron** (CREATE EXTENSION y cron.schedule) si estás en Free tier |
+| 003_stripe_integration.sql | ⚠️ Pendiente de ejecutar por el usuario en Supabase SQL Editor |
 
 ---
 
@@ -266,36 +315,20 @@ En el frontend, filtrar `planOptions` por `visible: true` consultando `app_setti
 
 ### 6.1 pg_cron requiere Supabase Pro ($25/mes)
 
-**Problema**: `CREATE EXTENSION pg_cron` solo está disponible en Supabase **Pro plan** ($25/mes) o superior. En el Free tier, la migración 002 fallará en esa línea.
+**Decisión: Supabase Free tier.** Se implementó alternativa:
 
-**Alternativas si estás en Free tier**:
+| Componente | Función |
+|-----------|--------|
+| **Edge Function `renew-subscriptions`** | Ejecuta `renew_expired_subscriptions()` vía service_role |
+| **GitHub Actions workflow** | Cron diario a las 00:05 UTC que invoca la Edge Function |
+| **Stripe webhooks** | Para usuarios con Stripe, la renovación se maneja vía `invoice.paid` webhook |
 
-| Alternativa | Costo | Complejidad | Fiabilidad |
-|-------------|-------|-------------|------------|
-| **Supabase Edge Function + cron externo** | $0 | Media | Alta |
-| **GitHub Actions cron** | $0 | Baja | Alta |
-| **cron-job.org** | $0 | Baja | Media |
-| **Cliente (app abierta)** | $0 | Baja | ❌ Baja — depende del usuario |
+La función `renew_expired_subscriptions()` de migration 002 sigue siendo necesaria para planes asignados manualmente por el admin (sin Stripe). Para usuarios Stripe, el webhook `invoice.paid` maneja la renovación directamente.
 
-**Recomendación**: Crear una **Supabase Edge Function** `renew-subscriptions` que ejecute la misma lógica SQL, y invocarla con un **GitHub Actions workflow** programado diariamente:
-
-```yaml
-# .github/workflows/renew-subscriptions.yml
-name: Renew Subscriptions
-on:
-  schedule:
-    - cron: '5 0 * * *' # 00:05 UTC diario
-jobs:
-  renew:
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          curl -X POST \
-            'https://TU_PROJECT.supabase.co/functions/v1/renew-subscriptions' \
-            -H 'Authorization: Bearer TU_SERVICE_ROLE_KEY'
-```
-
-Esto da el mismo resultado que pg_cron a costo $0. **Pendiente de implementar si se decide no usar Pro tier.**
+**Setup requerido:**
+1. Deploy Edge Functions: `supabase functions deploy renew-subscriptions --no-verify-jwt`
+2. Setear secret: `supabase secrets set CRON_SECRET=tu-secret-random`
+3. GitHub repo secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
 
 ### 6.2 Seguridad del cambio de plan
 
@@ -336,7 +369,32 @@ El código está implementado pero requiere configuración manual:
 
 **Error conocido**: Si se configura mal el Client ID, Supabase devuelve "El valor X no es snowflake" — significa que el Client ID no es numérico.
 
-### 6.4 Electron en producción
+### 6.4 Stripe Integration Architecture
+
+**Flujo de suscripción:**
+1. Usuario clic en plan card (SettingsPage) → llama Edge Function `create-checkout`
+2. Edge Function crea Stripe Checkout Session → devuelve URL
+3. App abre URL en navegador externo vía `shell.openExternal`
+4. Usuario completa pago en Stripe
+5. Stripe envía webhook `checkout.session.completed` → Edge Function `stripe-webhook`
+6. Webhook llama `activate_subscription()` → actualiza perfil (plan, créditos, stripe_subscription_id)
+7. App detecta cambio via polling cada 5s
+
+**Flujo de compra de créditos:**
+1. Usuario clic "Comprar" en paquete (CreditsPage) → `create-checkout` con `type: credit_package`
+2. Pago one-time en Stripe
+3. Webhook llama `add_purchased_credits()` → suma créditos al perfil
+
+**Renovación mensual:**
+- Stripe cobra automáticamente → webhook `invoice.paid` → `handle_subscription_renewal()` → reset subscription_credits
+
+**Cancelación:**
+- Via Customer Portal (Stripe) o directo en la app → webhook `customer.subscription.deleted` → `cancel_subscription()`
+
+**Gestión:**
+- Botón "Gestionar suscripción" abre Stripe Customer Portal (cambiar método de pago, cancelar, etc.)
+
+### 6.5 Electron en producción
 
 El Main Process actual solo maneja la ventana frameless. Para producción necesita:
 - IPC handlers para nut.js (auto-login)
@@ -366,9 +424,10 @@ Las credenciales de las cuentas de LoL (`encrypted_password` en tabla `accounts`
 | 6 | SettingsPage mostraba datos de plan desactualizados | `auth.fetchProfile()` en `onMounted` | Feb 2026 |
 | 7 | Sesión no persistía / errores de AbortController | `syncSession()` + `authUnsubscribe` + try/catch robusto (arreglado por el usuario) | Feb 2026 |
 
----
+| 8 | Orden de créditos corregido | Subscription first (era purchased first) | Feb 2026 |
+| 9 | Plan requerido para comprar créditos | Validación en CreditsPage + Edge Function | Feb 2026 |
 
-## 8. Lo que Falta para el MVP
+---
 
 El MVP es la versión mínima funcional que se puede distribuir a los primeros usuarios (amigos). Incluye todo lo necesario para que paguen, alquilen cuentas y las usen.
 
@@ -469,35 +528,48 @@ Estas acciones requieren intervención manual y no pueden ser automatizadas por 
 |---|--------|---------|
 | 1 | **Crear proyecto Supabase** | [supabase.com](https://supabase.com) → New Project |
 | 2 | **Ejecutar migración 001** | SQL Editor → pegar contenido de `supabase/migrations/001_initial_schema.sql` → Run |
-| 3 | **Ejecutar migración 002** | SQL Editor → pegar `002_early_bird_pgcron.sql`. **Nota**: si estás en Free tier, comenta la línea `CREATE EXTENSION IF NOT EXISTS pg_cron;` y todo lo relacionado al cron schedule (líneas de `cron.schedule`). La función `renew_expired_subscriptions()` y `change_user_plan()` sí se pueden crear. |
-| 4 | **Crear `.env`** | Copiar `.env.example` → renombrar a `.env` → llenar `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` |
-| 5 | **Probar login** | `npm run dev` → registrar usuario → verificar que se crea el perfil |
-| 6 | **Promover a admin** | `UPDATE profiles SET role = 'admin' WHERE id = 'TU-USER-ID';` |
+| 3 | **Ejecutar migración 002** | SQL Editor → pegar `002_early_bird_pgcron.sql`. **IMPORTANTE**: Comentar `CREATE EXTENSION IF NOT EXISTS pg_cron;` y las líneas de `cron.schedule` (estás en Free tier). Las funciones `renew_expired_subscriptions()` y `change_user_plan()` SÍ se crean. |
+| 4 | **Ejecutar migración 003** | SQL Editor → pegar `003_stripe_integration.sql` → Run |
+| 5 | **Crear `.env`** | Copiar `.env.example` → renombrar a `.env` → llenar `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` |
+| 6 | **Probar login** | `npm run dev` → registrar usuario → verificar que se crea el perfil |
+| 7 | **Promover a admin** | `UPDATE profiles SET role = 'admin' WHERE id = 'TU-USER-ID';` |
+
+### Para Stripe
+
+| # | Acción | Detalle |
+|---|--------|--------|
+| 8 | **Crear cuenta Stripe** | [stripe.com](https://stripe.com) |
+| 9 | **Crear productos en Stripe** | 3 suscripciones: Early Bird ($6/mes), Basic ($10/mes), Unlimited ($30/mes). 3 paquetes one-time: Starter ($5), Popular ($10), Pro ($22) |
+| 10 | **Copiar Price IDs** | Cada producto tiene un `price_id` (ej: `price_1Abc...`) |
+| 11 | **Deploy Edge Functions** | `supabase functions deploy create-checkout`, `stripe-webhook --no-verify-jwt`, `customer-portal`, `renew-subscriptions --no-verify-jwt`, `payment-result --no-verify-jwt` |
+| 12 | **Setear secrets en Supabase** | `supabase secrets set STRIPE_SECRET_KEY=sk_test_xxx STRIPE_WEBHOOK_SECRET=whsec_xxx STRIPE_PRICE_EARLY_BIRD=price_xxx STRIPE_PRICE_BASIC=price_xxx STRIPE_PRICE_UNLIMITED=price_xxx CRON_SECRET=tu-secret` |
+| 13 | **Configurar webhook en Stripe** | Endpoint: `https://TU_PROJECT.supabase.co/functions/v1/stripe-webhook`. Eventos: `checkout.session.completed`, `invoice.paid`, `customer.subscription.deleted`, `invoice.payment_failed` |
+| 14 | **Actualizar credit_packages** | `UPDATE credit_packages SET stripe_price_id = 'price_xxx' WHERE name = 'Starter';` (repetir para cada paquete) |
+| 15 | **Configurar Customer Portal** | Stripe Dashboard → Settings → Customer Portal → Habilitar cancelación y cambio de plan |
+
+### Para GitHub Actions (cron de renovación)
+
+| # | Acción | Detalle |
+|---|--------|--------|
+| 16 | **Push repo a GitHub** | El workflow `.github/workflows/renew-subscriptions.yml` ya está creado |
+| 17 | **Setear secrets en GitHub** | Settings → Secrets → `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` |
 
 ### Para Discord OAuth
 
 | # | Acción | Detalle |
 |---|--------|---------|
-| 7 | Crear aplicación en Discord Developer Portal | [discord.com/developers](https://discord.com/developers/applications) |
-| 8 | Copiar Application ID (numérico) y Client Secret | |
-| 9 | Agregar redirect URL | `https://TU_PROJECT_REF.supabase.co/auth/v1/callback` |
-| 10 | Configurar en Supabase | Auth → Providers → Discord → Client ID + Secret |
-
-### Para Stripe (cuando se implemente)
-
-| # | Acción | Detalle |
-|---|--------|---------|
-| 11 | Crear cuenta Stripe | [stripe.com](https://stripe.com) |
-| 12 | Crear productos/precios | 3 suscripciones (early_bird $6, basic $10, unlimited $30) + paquetes de créditos |
-| 13 | Configurar webhook endpoint | Apuntar a la Edge Function cuando se cree |
+| 18 | Crear aplicación en Discord Developer Portal | [discord.com/developers](https://discord.com/developers/applications) |
+| 19 | Copiar Application ID (numérico) y Client Secret | |
+| 20 | Agregar redirect URL | `https://TU_PROJECT_REF.supabase.co/auth/v1/callback` |
+| 21 | Configurar en Supabase | Auth → Providers → Discord → Client ID + Secret |
 
 ### Decisión requerida
 
-| # | Decisión | Opciones |
-|---|----------|----------|
-| 14 | **¿Supabase Free o Pro?** | Free ($0, necesita alternativa a pg_cron) vs Pro ($25/mes, pg_cron nativo + backups + más storage) |
-| 15 | **¿Cuántos créditos Unlimited?** | Actualmente Unlimited no tiene créditos en absoluto. ¿Confirmas o quieres que tenga algún número simbólico? |
-| 16 | **¿Credenciales LoL ya están en la DB?** | Si sí, ¿en qué formato? Para planificar la migración a encriptado |
+| # | Decisión | Estado |
+|---|----------|--------|
+| ~14~ | ~¿Supabase Free o Pro?~ | ✅ **Free** — alternativa a pg_cron implementada |
+| ~15~ | ~¿Cuántos créditos Unlimited?~ | ✅ **Cero** — $30/mes = alquiler ilimitado sin créditos |
+| 16 | **¿Credenciales LoL ya están en la DB?** | Pendiente — para planificar encriptación AES-256 |
 
 ---
 
@@ -507,7 +579,7 @@ Estas acciones requieren intervención manual y no pueden ser automatizadas por 
 
 | Riesgo | Impacto | Mitigación |
 |--------|---------|------------|
-| **Sin pasarela de pago** | No se puede cobrar | Implementar Stripe es el siguiente paso crítico |
+| **Sin pasarela de pago** | ✅ Resuelto | Stripe integrado (código completo, pendiente configuración) |
 | **RLS de profiles muy permisivo** | Un usuario técnico podría darse créditos infinitos via SDK | Restringir RLS a solo `display_name`, forzar todo lo demás vía SECURITY DEFINER |
 | **Credenciales LoL sin encriptar** | Si la DB se compromete, se exponen todas las cuentas | Implementar AES-256-GCM antes de cargar datos reales |
 | **Sin heartbeat** | Un usuario puede cerrar el app y mantener la cuenta lockeada indefinidamente | Implementar heartbeat + auto-release |
@@ -516,7 +588,7 @@ Estas acciones requieren intervención manual y no pueden ser automatizadas por 
 
 | Riesgo | Impacto | Mitigación |
 |--------|---------|------------|
-| **pg_cron no disponible en Free tier** | Las suscripciones no se renuevan automáticamente | Edge Function + GitHub Actions como alternativa |
+| pg_cron no disponible en Free tier | ✅ Resuelto | Edge Function + GitHub Actions como alternativa implementada |
 | **Discord OAuth mal configurado** | Usuarios no pueden loguear con Discord | Documentación clara de configuración (sección 10) |
 | **Sin auto-updates** | Los usuarios tendrían que descargar manualmente cada actualización | electron-updater + GitHub Releases (Fase 2) |
 
@@ -527,8 +599,8 @@ Estas acciones requieren intervención manual y no pueden ser automatizadas por 
 | Plan cards hardcodeadas | Baja | Deberían cargarse dinámicamente desde `app_settings.plans` |
 | Lint warnings en Sidebar | Cosmético | `pl-[9px]` → `pl-2.25`, `bg-gradient-to-br` → `bg-linear-to-br` (Tailwind v4) |
 | `@theme` warning en CSS | Cosmético | Linter no reconoce Tailwind v4, funciona correctamente |
-| Sin validación de pago en plan change | Alta | Actualmente el cambio de plan es "gratis". Stripe webhook debe validar el pago |
-| Orden de consumo de créditos | Media | El código deduce `purchased` primero, pero el plan original dice `subscription` primero. **Verificar con el usuario cuál prefiere.** |
+| Sin validación de pago en plan change | ✅ Resuelto | Plan change ahora pasa por Stripe Checkout. Admin puede cambiar planes vía RPC directamente. |
+| Orden de consumo de créditos | ✅ Resuelto | Subscription primero, purchased después. |
 
 ---
 

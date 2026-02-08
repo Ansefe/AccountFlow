@@ -10,6 +10,9 @@ const api = {
     onMaximizedChange: (callback: (maximized: boolean) => void): void => {
       ipcRenderer.on('window:maximized-change', (_, maximized) => callback(maximized))
     }
+  },
+  shell: {
+    openExternal: (url: string): void => ipcRenderer.send('shell:openExternal', url)
   }
 }
 

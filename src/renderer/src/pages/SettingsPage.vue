@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Loader2, Check, LogOut, Crown, Zap, Star, Sparkles, Timer } from 'lucide-vue-next'
+import { Loader2, Check, LogOut, Crown, Zap, Star, Sparkles, Timer, ExternalLink, CreditCard } from 'lucide-vue-next'
 import { useAuthStore } from '@renderer/stores/auth.store'
 import { supabase } from '@renderer/lib/supabase'
+import { checkoutSubscription, openCustomerPortal } from '@renderer/lib/paddle'
 import type { PlanType } from '@renderer/types/database'
 
 const router = useRouter()
@@ -51,6 +52,7 @@ const planOptions: PlanOption[] = [
 ]
 
 const currentPlan = computed(() => auth.profile?.plan_type || 'none')
+const hasPaddleSubscription = computed(() => !!auth.profile?.paddle_subscription_id)
 
 const planLabel = computed(() => {
   const labels: Record<string, string> = {
@@ -65,7 +67,19 @@ const planLabel = computed(() => {
 onMounted(async () => {
   await auth.fetchProfile()
   displayName.value = auth.profile?.display_name || ''
+  // Poll for profile changes (e.g., after Paddle checkout in browser)
+  profilePollInterval = window.setInterval(async () => {
+    await auth.fetchProfile()
+  }, 5000)
 })
+
+onUnmounted(() => {
+  if (profilePollInterval) {
+    clearInterval(profilePollInterval)
+  }
+})
+
+let profilePollInterval: number | null = null
 
 async function saveProfile(): Promise<void> {
   if (!auth.user) return
@@ -99,34 +113,54 @@ async function changePlan(newPlan: PlanType): Promise<void> {
   planMsg.value = ''
 
   try {
-    const { data, error: rpcError } = await supabase.rpc('change_user_plan', {
-      target_user_id: auth.user.id,
-      new_plan: newPlan
-    })
-
-    if (rpcError) throw rpcError
-
-    const result = data as Record<string, unknown>
-    if (result.error) {
-      planError.value = result.error as string
-      return
-    }
-
-    await auth.fetchProfile()
-
-    const planOption = planOptions.find(p => p.type === newPlan)
-    const creditsGranted = result.credits_granted as number
-
     if (newPlan === 'none') {
-      planMsg.value = 'Plan cancelado. Tus créditos comprados se conservan.'
-    } else if (newPlan === 'unlimited') {
-      planMsg.value = 'Plan Unlimited activado. Ya no necesitas créditos para alquilar cuentas.'
+      // Cancellation: if Paddle subscription exists, open Customer Portal
+      if (hasPaddleSubscription.value) {
+        planMsg.value = 'Abriendo portal de Paddle para cancelar tu suscripción...'
+        await openCustomerPortal()
+        planMsg.value = 'Se abrió el portal en tu navegador. Cancela tu suscripción ahí y vuelve a la app.'
+      } else {
+        // Manual plan (no Paddle) — use RPC directly
+        const { data, error: rpcError } = await supabase.rpc('change_user_plan', {
+          target_user_id: auth.user.id,
+          new_plan: newPlan
+        })
+        if (rpcError) throw rpcError
+        const result = data as Record<string, unknown>
+        if (result.error) {
+          planError.value = result.error as string
+          return
+        }
+        await auth.fetchProfile()
+        planMsg.value = 'Plan cancelado. Tus créditos comprados se conservan.'
+      }
     } else {
-      planMsg.value = `Plan cambiado a ${planOption?.label}. Se agregaron ${creditsGranted} créditos de suscripción.`
+      // Subscribing to a paid plan → Paddle Checkout
+      planMsg.value = 'Abriendo Paddle Checkout en tu navegador...'
+      await checkoutSubscription(newPlan)
+      planMsg.value = 'Completa el pago en tu navegador. Tu plan se activará automáticamente al confirmar.'
     }
-    setTimeout(() => { planMsg.value = '' }, 5000)
+
+    setTimeout(() => { planMsg.value = '' }, 8000)
   } catch (err: unknown) {
-    planError.value = err instanceof Error ? err.message : 'Error al cambiar plan'
+    planError.value = err instanceof Error ? err.message : 'Error al procesar el cambio de plan'
+  } finally {
+    changingPlan.value = false
+  }
+}
+
+async function handleManageSubscription(): Promise<void> {
+  changingPlan.value = true
+  planError.value = ''
+  planMsg.value = ''
+
+  try {
+    planMsg.value = 'Abriendo portal de Paddle...'
+    await openCustomerPortal()
+    planMsg.value = 'Se abrió el portal en tu navegador. Gestiona tu suscripción ahí.'
+    setTimeout(() => { planMsg.value = '' }, 8000)
+  } catch (err: unknown) {
+    planError.value = err instanceof Error ? err.message : 'Error al abrir el portal'
   } finally {
     changingPlan.value = false
   }
@@ -243,11 +277,27 @@ async function handleLogout(): Promise<void> {
 
       <div class="mt-3 space-y-1">
         <p class="text-[11px] text-text-muted">
-          Los créditos de suscripción se recargan automáticamente cada mes vía el servidor.
+          Los créditos de suscripción se recargan automáticamente cada mes vía Paddle.
           Los créditos comprados se conservan siempre independientemente del plan.
         </p>
         <p v-if="auth.isUnlimited" class="text-[11px] text-accent">
           Con Unlimited no necesitas créditos — alquilas cuentas sin límite de tiempo, una a la vez.
+        </p>
+      </div>
+
+      <!-- Manage Paddle Subscription -->
+      <div v-if="hasPaddleSubscription && currentPlan !== 'none'" class="mt-4 pt-4 border-t border-border-default">
+        <button
+          :disabled="changingPlan"
+          class="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-surface border border-border-default text-xs font-semibold text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-colors disabled:opacity-50"
+          @click="handleManageSubscription"
+        >
+          <CreditCard class="w-3.5 h-3.5" />
+          Gestionar suscripción
+          <ExternalLink class="w-3 h-3 text-text-muted" />
+        </button>
+        <p class="text-[11px] text-text-muted mt-1.5">
+          Cambiar método de pago, actualizar plan o cancelar suscripción via Paddle.
         </p>
       </div>
     </div>

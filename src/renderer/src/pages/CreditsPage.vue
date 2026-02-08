@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { Coins, Loader2, ArrowUpRight, ArrowDownRight, RefreshCw } from 'lucide-vue-next'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { Coins, Loader2, ArrowUpRight, ArrowDownRight, RefreshCw, ExternalLink } from 'lucide-vue-next'
 import { useAuthStore } from '@renderer/stores/auth.store'
 import { supabase } from '@renderer/lib/supabase'
+import { checkoutCreditPackage } from '@renderer/lib/paddle'
 import type { CreditTransaction, CreditPackage } from '@renderer/types/database'
 
 const auth = useAuthStore()
@@ -52,48 +53,43 @@ async function fetchTransactions(): Promise<void> {
   loadingTx.value = false
 }
 
+const buyError = ref('')
+
 async function handleBuyPackage(pkg: CreditPackage): Promise<void> {
   if (!auth.user || !auth.profile) return
   buyingPackageId.value = pkg.id
+  buyError.value = ''
 
   try {
-    // Add credits to profile
-    const { error: updateErr } = await supabase
-      .from('profiles')
-      .update({ purchased_credits: auth.profile.purchased_credits + pkg.credits })
-      .eq('id', auth.user.id)
-
-    if (updateErr) {
-      alert('Error al comprar: ' + updateErr.message)
+    if (!pkg.paddle_price_id) {
+      buyError.value = 'Este paquete aún no tiene precio de Paddle configurado. Contacta al admin.'
       return
     }
 
-    // Log the transaction
-    await supabase.from('credit_transactions').insert({
-      user_id: auth.user.id,
-      amount: pkg.credits,
-      balance_type: 'purchased',
-      type: 'package_purchase',
-      description: `Compra paquete ${pkg.name} — ${pkg.credits} créditos`
-    })
-
-    // Log activity
-    await supabase.from('activity_log').insert({
-      user_id: auth.user.id,
-      event_type: 'credit_purchase',
-      metadata: { package_id: pkg.id, package_name: pkg.name, credits: pkg.credits, price_usd: pkg.price_usd }
-    })
-
-    // Refresh data
-    await auth.fetchProfile()
-    await fetchTransactions()
+    await checkoutCreditPackage(pkg.id)
+    // Checkout opens in browser, credits will be added via webhook
+  } catch (err: unknown) {
+    buyError.value = err instanceof Error ? err.message : 'Error al iniciar el pago'
   } finally {
     buyingPackageId.value = null
   }
 }
 
+let profilePollInterval: number | null = null
+
 onMounted(async () => {
   await Promise.all([fetchPackages(), fetchTransactions()])
+  // Poll for profile changes (e.g., after Paddle payment in browser)
+  profilePollInterval = window.setInterval(async () => {
+    await auth.fetchProfile()
+    await fetchTransactions()
+  }, 5000)
+})
+
+onUnmounted(() => {
+  if (profilePollInterval) {
+    clearInterval(profilePollInterval)
+  }
 })
 </script>
 
@@ -126,6 +122,20 @@ onMounted(async () => {
         </div>
       </div>
 
+      <!-- Users without a plan cannot buy credits -->
+      <div v-else-if="!auth.profile?.plan_type || auth.profile.plan_type === 'none'" class="rounded-xl bg-warning/5 border border-warning/20 p-6 text-center max-w-2xl">
+        <div class="text-sm font-semibold text-text-primary">Necesitas un plan activo</div>
+        <div class="text-xs text-text-secondary mt-1">
+          Para comprar créditos extra primero debes tener un plan de suscripción activo.
+        </div>
+        <button
+          class="mt-3 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-xs font-semibold text-white transition-colors"
+          @click="$router.push('/settings')"
+        >
+          Ver planes
+        </button>
+      </div>
+
       <template v-else>
         <div v-if="loadingPackages" class="text-sm text-text-muted">Cargando paquetes...</div>
         <div v-else class="grid grid-cols-3 gap-4 max-w-2xl">
@@ -146,12 +156,14 @@ onMounted(async () => {
               @click="handleBuyPackage(pkg)"
             >
               <Loader2 v-if="buyingPackageId === pkg.id" class="w-3.5 h-3.5 animate-spin" />
-              {{ buyingPackageId === pkg.id ? 'Procesando...' : 'Comprar' }}
+              <ExternalLink v-else class="w-3 h-3" />
+              {{ buyingPackageId === pkg.id ? 'Abriendo...' : 'Comprar' }}
             </button>
           </div>
         </div>
+        <div v-if="buyError" class="mt-3 p-2.5 rounded-lg bg-error/10 border border-error/30 text-xs text-error max-w-2xl">{{ buyError }}</div>
         <p class="text-[11px] text-text-muted mt-3 max-w-2xl">
-          Pagos con Stripe próximamente. Actualmente el admin puede ajustar créditos manualmente.
+          Se abrirá Paddle en tu navegador para completar el pago. Los créditos se agregan automáticamente.
         </p>
       </template>
     </div>

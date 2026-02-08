@@ -65,9 +65,9 @@ async function handleRent(): Promise<void> {
   try {
     const creditsToSpend = selectedOption.value.credits
 
-    // Deduct credits (prefer purchased first, then subscription)
-    const fromPurchased = Math.min(auth.profile!.purchased_credits, creditsToSpend)
-    const fromSubscription = creditsToSpend - fromPurchased
+    // Deduct credits (prefer subscription first, then purchased)
+    const fromSubscription = Math.min(auth.profile!.subscription_credits, creditsToSpend)
+    const fromPurchased = creditsToSpend - fromSubscription
 
     const { error: creditError } = await supabase
       .from('profiles')
@@ -99,7 +99,7 @@ async function handleRent(): Promise<void> {
     await supabase.from('credit_transactions').insert({
       user_id: auth.user.id,
       amount: -creditsToSpend,
-      balance_type: fromPurchased > 0 ? 'purchased' : 'subscription',
+      balance_type: fromSubscription > 0 ? 'subscription' : 'purchased',
       type: 'rental_spend',
       description: `Alquiler de ${props.account.name} por ${selectedOption.value.label}`
     })

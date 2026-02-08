@@ -8,8 +8,13 @@ interface WindowAPI {
   onMaximizedChange: (callback: (maximized: boolean) => void) => void
 }
 
+interface ShellAPI {
+  openExternal: (url: string) => void
+}
+
 interface API {
   window: WindowAPI
+  shell: ShellAPI
 }
 
 declare global {
