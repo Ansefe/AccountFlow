@@ -12,6 +12,17 @@ const password = ref('')
 const errorMsg = ref('')
 const isLoading = ref(false)
 
+const LOGIN_TIMEOUT_MS = 25_000
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_resolve, reject) => {
+      window.setTimeout(() => reject(new Error('timeout')), timeoutMs)
+    })
+  ])
+}
+
 async function handleLogin(): Promise<void> {
   if (!email.value || !password.value) {
     errorMsg.value = 'Por favor completa todos los campos'
@@ -19,22 +30,49 @@ async function handleLogin(): Promise<void> {
   }
   isLoading.value = true
   errorMsg.value = ''
-  const { error } = await auth.signInWithEmail(email.value, password.value)
-  isLoading.value = false
-  if (error) {
-    errorMsg.value = error
-    return
+  try {
+    const { error } = await withTimeout(
+      auth.signInWithEmail(email.value, password.value),
+      LOGIN_TIMEOUT_MS
+    )
+    if (error) {
+      errorMsg.value = error
+      return
+    }
+    router.push('/')
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    if (/timeout/i.test(message)) {
+      // A veces el token llega pero el UI se queda esperando por estado; re-sincroniza.
+      await auth.syncSession()
+      if (auth.isAuthenticated) {
+        router.push('/')
+        return
+      }
+      errorMsg.value = 'La solicitud está tardando demasiado. Intenta nuevamente.'
+    } else {
+      errorMsg.value = 'Ocurrió un error inesperado. Intenta nuevamente.'
+    }
+  } finally {
+    isLoading.value = false
   }
-  router.push('/')
 }
 
 async function handleDiscordLogin(): Promise<void> {
   isLoading.value = true
   errorMsg.value = ''
-  const { error } = await auth.signInWithDiscord()
-  isLoading.value = false
-  if (error) {
-    errorMsg.value = error
+  try {
+    const { error } = await withTimeout(auth.signInWithDiscord(), LOGIN_TIMEOUT_MS)
+    if (error) errorMsg.value = error
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    if (/timeout/i.test(message)) {
+      errorMsg.value = 'La solicitud está tardando demasiado. Intenta nuevamente.'
+    } else {
+      errorMsg.value = 'Ocurrió un error inesperado. Intenta nuevamente.'
+    }
+  } finally {
+    isLoading.value = false
   }
 }
 </script>

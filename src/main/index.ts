@@ -3,6 +3,11 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 
+// Asegura rutas escribibles para cache/storage (evita errores de "Acceso denegado" en Windows).
+const userDataDir = join(app.getPath('appData'), 'AccountFlow')
+app.setPath('userData', userDataDir)
+app.commandLine.appendSwitch('disk-cache-dir', join(userDataDir, 'Cache'))
+
 let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {

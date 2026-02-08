@@ -10,6 +10,8 @@ export const useAuthStore = defineStore('auth', () => {
   const profile = ref<Profile | null>(null)
   const loading = ref(true)
 
+  let authUnsubscribe: (() => void) | null = null
+
   const isAuthenticated = computed(() => !!session.value)
   const isAdmin = computed(() => profile.value?.role === 'admin')
   const totalCredits = computed(() => {
@@ -18,26 +20,40 @@ export const useAuthStore = defineStore('auth', () => {
   })
   const displayName = computed(() => profile.value?.display_name || user.value?.email || 'Usuario')
 
+  async function syncSession(): Promise<void> {
+    try {
+      const { data, error } = await supabase.auth.getSession()
+      if (error) throw error
+
+      session.value = data.session
+      user.value = data.session?.user ?? null
+      if (user.value) {
+        void fetchProfile()
+      } else {
+        profile.value = null
+      }
+    } catch (err) {
+      console.error('[auth] syncSession failed', err)
+    }
+  }
+
   async function initialize(): Promise<void> {
     loading.value = true
     try {
-      const { data } = await supabase.auth.getSession()
-      session.value = data.session
-      user.value = data.session?.user ?? null
+      await syncSession()
 
-      if (user.value) {
-        await fetchProfile()
+      if (!authUnsubscribe) {
+        const { data } = supabase.auth.onAuthStateChange((_event, newSession) => {
+          session.value = newSession
+          user.value = newSession?.user ?? null
+          if (user.value) {
+            void fetchProfile()
+          } else {
+            profile.value = null
+          }
+        })
+        authUnsubscribe = () => data.subscription.unsubscribe()
       }
-
-      supabase.auth.onAuthStateChange(async (_event, newSession) => {
-        session.value = newSession
-        user.value = newSession?.user ?? null
-        if (user.value) {
-          await fetchProfile()
-        } else {
-          profile.value = null
-        }
-      })
     } finally {
       loading.value = false
     }
@@ -45,21 +61,35 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function fetchProfile(): Promise<void> {
     if (!user.value) return
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.value.id)
-      .single()
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.value.id)
+        .single()
 
-    if (data) {
-      profile.value = data as Profile
+      if (error) throw error
+      if (data) profile.value = data as Profile
+    } catch (err) {
+      // No bloquear la app si el perfil falla (timeout / offline / etc.)
+      console.error('[auth] fetchProfile failed', err)
     }
   }
 
   async function signInWithEmail(email: string, password: string): Promise<{ error: string | null }> {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) return { error: error.message }
-    return { error: null }
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) return { error: error.message }
+      return { error: null }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err)
+      // El fetch con AbortController suele terminar como AbortError (según runtime).
+      if (/abort|aborted|aborterror/i.test(message)) {
+        return { error: 'Tiempo de espera agotado. Revisa tu conexión e intenta nuevamente.' }
+      }
+      console.error('[auth] signInWithEmail failed', err)
+      return { error: 'No fue posible iniciar sesión. Intenta nuevamente.' }
+    }
   }
 
   async function signUpWithEmail(email: string, password: string, displayNameValue: string): Promise<{ error: string | null }> {
@@ -102,6 +132,7 @@ export const useAuthStore = defineStore('auth', () => {
     totalCredits,
     displayName,
     initialize,
+    syncSession,
     fetchProfile,
     signInWithEmail,
     signUpWithEmail,
