@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Loader2, Check, LogOut } from 'lucide-vue-next'
+import { Loader2, Check, LogOut, Crown, Zap, Star, Sparkles, Timer } from 'lucide-vue-next'
 import { useAuthStore } from '@renderer/stores/auth.store'
 import { supabase } from '@renderer/lib/supabase'
+import type { PlanType } from '@renderer/types/database'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -12,9 +13,57 @@ const displayName = ref('')
 const saving = ref(false)
 const saved = ref(false)
 const errorMsg = ref('')
+const planMsg = ref('')
+const planError = ref('')
+const changingPlan = ref(false)
 const riotClientPath = ref('C:\\Riot Games\\Riot Client\\RiotClientServices.exe')
 
-onMounted(() => {
+interface PlanOption {
+  type: PlanType
+  label: string
+  price: string
+  originalPrice?: string
+  credits: number | null
+  description: string
+  icon: typeof Crown
+  badge?: string
+  highlight?: boolean
+}
+
+const planOptions: PlanOption[] = [
+  {
+    type: 'none', label: 'Sin Plan', price: 'Gratis', credits: null,
+    description: 'Sin créditos de suscripción. Puedes comprar créditos individuales.', icon: Star
+  },
+  {
+    type: 'early_bird', label: 'Early Bird', price: '$6/mes', originalPrice: '$10/mes', credits: 1000,
+    description: '1,000 créditos/mes de suscripción.', icon: Sparkles,
+    badge: '40% OFF · Tiempo limitado', highlight: true
+  },
+  {
+    type: 'basic', label: 'Basic', price: '$10/mes', credits: 1000,
+    description: '1,000 créditos/mes de suscripción.', icon: Zap
+  },
+  {
+    type: 'unlimited', label: 'Unlimited', price: '$30/mes', credits: null,
+    description: 'Alquiler ilimitado, sin gasto de créditos. Una cuenta activa a la vez.', icon: Crown
+  }
+]
+
+const currentPlan = computed(() => auth.profile?.plan_type || 'none')
+
+const planLabel = computed(() => {
+  const labels: Record<string, string> = {
+    none: 'Sin plan',
+    early_bird: 'Plan Early Bird',
+    basic: 'Plan Basic',
+    unlimited: 'Plan Unlimited'
+  }
+  return labels[currentPlan.value] || 'Sin plan'
+})
+
+onMounted(async () => {
+  await auth.fetchProfile()
   displayName.value = auth.profile?.display_name || ''
 })
 
@@ -41,20 +90,56 @@ async function saveProfile(): Promise<void> {
   setTimeout(() => { saved.value = false }, 2000)
 }
 
+async function changePlan(newPlan: PlanType): Promise<void> {
+  if (!auth.user || !auth.profile) return
+  if (newPlan === currentPlan.value) return
+
+  changingPlan.value = true
+  planError.value = ''
+  planMsg.value = ''
+
+  try {
+    const { data, error: rpcError } = await supabase.rpc('change_user_plan', {
+      target_user_id: auth.user.id,
+      new_plan: newPlan
+    })
+
+    if (rpcError) throw rpcError
+
+    const result = data as Record<string, unknown>
+    if (result.error) {
+      planError.value = result.error as string
+      return
+    }
+
+    await auth.fetchProfile()
+
+    const planOption = planOptions.find(p => p.type === newPlan)
+    const creditsGranted = result.credits_granted as number
+
+    if (newPlan === 'none') {
+      planMsg.value = 'Plan cancelado. Tus créditos comprados se conservan.'
+    } else if (newPlan === 'unlimited') {
+      planMsg.value = 'Plan Unlimited activado. Ya no necesitas créditos para alquilar cuentas.'
+    } else {
+      planMsg.value = `Plan cambiado a ${planOption?.label}. Se agregaron ${creditsGranted} créditos de suscripción.`
+    }
+    setTimeout(() => { planMsg.value = '' }, 5000)
+  } catch (err: unknown) {
+    planError.value = err instanceof Error ? err.message : 'Error al cambiar plan'
+  } finally {
+    changingPlan.value = false
+  }
+}
+
 async function handleLogout(): Promise<void> {
   await auth.signOut()
   router.push('/login')
 }
-
-const planLabels: Record<string, string> = {
-  none: 'Ninguno',
-  basic: 'Basic — $10/mes',
-  unlimited: 'Unlimited — $30/mes'
-}
 </script>
 
 <template>
-  <div class="space-y-6 max-w-2xl">
+  <div class="space-y-6 max-w-3xl">
     <!-- Profile Section -->
     <div class="rounded-xl bg-surface border border-border-default p-6">
       <h2 class="text-base font-semibold text-text-primary mb-4">Perfil</h2>
@@ -96,25 +181,75 @@ const planLabels: Record<string, string> = {
 
     <!-- Plan Section -->
     <div class="rounded-xl bg-surface border border-border-default p-6">
-      <h2 class="text-base font-semibold text-text-primary mb-4">Plan</h2>
-      <div class="flex items-center justify-between">
+      <h2 class="text-base font-semibold text-text-primary mb-4">Tu Plan</h2>
+
+      <!-- Current plan summary -->
+      <div class="flex items-center justify-between mb-5 pb-4 border-b border-border-default">
         <div>
-          <div class="text-sm font-medium text-text-primary">
-            Plan {{ planLabels[auth.profile?.plan_type || 'none'] }}
-          </div>
-          <div v-if="auth.profile?.plan_expires_at" class="text-xs text-text-muted mt-0.5">
-            Expira: {{ new Date(auth.profile.plan_expires_at).toLocaleDateString() }}
+          <div class="text-sm font-semibold text-text-primary">{{ planLabel }}</div>
+          <div v-if="auth.profile?.plan_expires_at" class="flex items-center gap-1 text-xs text-text-muted mt-0.5">
+            <Timer class="w-3 h-3" />
+            Se renueva: {{ new Date(auth.profile.plan_expires_at).toLocaleDateString() }}
           </div>
           <div v-else class="text-xs text-text-muted mt-0.5">Sin plan activo</div>
         </div>
-        <div class="flex items-center gap-2">
-          <div class="text-right">
-            <div class="text-xs text-text-secondary font-mono">{{ auth.totalCredits }} créditos</div>
+        <div class="text-right">
+          <div v-if="auth.isUnlimited" class="text-sm font-bold text-accent">∞ Ilimitado</div>
+          <div v-else>
+            <div class="text-sm font-bold font-mono text-text-primary">{{ auth.totalCredits }} créditos</div>
             <div class="text-[11px] text-text-muted">Sub: {{ auth.profile?.subscription_credits ?? 0 }} | Comp: {{ auth.profile?.purchased_credits ?? 0 }}</div>
           </div>
         </div>
       </div>
-      <p class="text-[11px] text-text-muted mt-3">Contacta al admin para cambios de plan.</p>
+
+      <!-- Messages -->
+      <div v-if="planMsg" class="mb-4 p-2.5 rounded-lg bg-success/10 border border-success/30 text-xs text-success">{{ planMsg }}</div>
+      <div v-if="planError" class="mb-4 p-2.5 rounded-lg bg-error/10 border border-error/30 text-xs text-error">{{ planError }}</div>
+
+      <!-- Plan cards -->
+      <div class="grid grid-cols-4 gap-3">
+        <button
+          v-for="plan in planOptions"
+          :key="plan.type"
+          :disabled="changingPlan || plan.type === currentPlan"
+          class="relative rounded-xl border p-4 text-left transition-all disabled:cursor-not-allowed"
+          :class="[
+            plan.type === currentPlan
+              ? 'bg-accent/10 border-accent/40'
+              : 'bg-bg-primary border-border-default hover:border-accent/50 hover:bg-surface-hover disabled:opacity-50',
+            plan.highlight && plan.type !== currentPlan ? 'ring-1 ring-warning/40' : ''
+          ]"
+          @click="changePlan(plan.type)"
+        >
+          <!-- Current badge -->
+          <div v-if="plan.type === currentPlan" class="absolute top-2 right-2">
+            <span class="text-[9px] font-bold uppercase bg-accent/20 text-accent px-1.5 py-0.5 rounded-full">Actual</span>
+          </div>
+
+          <!-- Discount badge -->
+          <div v-if="plan.badge && plan.type !== currentPlan" class="absolute -top-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap">
+            <span class="text-[9px] font-bold uppercase bg-warning text-bg-primary px-2 py-0.5 rounded-full">{{ plan.badge }}</span>
+          </div>
+
+          <component :is="plan.icon" class="w-5 h-5 mb-2" :class="plan.type === currentPlan ? 'text-accent' : plan.highlight ? 'text-warning' : 'text-text-muted'" />
+          <div class="text-sm font-bold text-text-primary">{{ plan.label }}</div>
+          <div class="flex items-center gap-1.5 mt-0.5">
+            <span class="text-xs font-semibold" :class="plan.highlight ? 'text-warning' : 'text-accent'">{{ plan.price }}</span>
+            <span v-if="plan.originalPrice" class="text-[10px] text-text-muted line-through">{{ plan.originalPrice }}</span>
+          </div>
+          <div class="text-[11px] text-text-muted mt-1.5 leading-tight">{{ plan.description }}</div>
+        </button>
+      </div>
+
+      <div class="mt-3 space-y-1">
+        <p class="text-[11px] text-text-muted">
+          Los créditos de suscripción se recargan automáticamente cada mes vía el servidor.
+          Los créditos comprados se conservan siempre independientemente del plan.
+        </p>
+        <p v-if="auth.isUnlimited" class="text-[11px] text-accent">
+          Con Unlimited no necesitas créditos — alquilas cuentas sin límite de tiempo, una a la vez.
+        </p>
+      </div>
     </div>
 
     <!-- Riot Client Path -->
@@ -136,7 +271,7 @@ const planLabels: Record<string, string> = {
       </div>
     </div>
 
-    <!-- Danger Zone -->
+    <!-- Session -->
     <div class="rounded-xl bg-surface border border-error/20 p-6">
       <h2 class="text-base font-semibold text-text-primary mb-4">Sesión</h2>
       <button

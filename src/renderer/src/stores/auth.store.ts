@@ -19,6 +19,7 @@ export const useAuthStore = defineStore('auth', () => {
     return profile.value.subscription_credits + profile.value.purchased_credits
   })
   const displayName = computed(() => profile.value?.display_name || user.value?.email || 'Usuario')
+  const isUnlimited = computed(() => profile.value?.plan_type === 'unlimited')
 
   async function syncSession(): Promise<void> {
     try {
@@ -129,6 +130,7 @@ export const useAuthStore = defineStore('auth', () => {
     loading,
     isAuthenticated,
     isAdmin,
+    isUnlimited,
     totalCredits,
     displayName,
     initialize,

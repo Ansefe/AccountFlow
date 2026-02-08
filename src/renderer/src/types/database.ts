@@ -1,4 +1,4 @@
-export type PlanType = 'none' | 'basic' | 'unlimited'
+export type PlanType = 'none' | 'early_bird' | 'basic' | 'unlimited'
 export type UserRole = 'user' | 'admin'
 export type AccountStatus = 'active' | 'inactive' | 'semi_active'
 export type BanType = 'permanent' | 'normals_required' | null

@@ -135,8 +135,8 @@ function navigate(path: string): void {
     <div class="mx-3 mb-2">
       <div class="rounded-xl bg-surface border border-border-default px-4 py-3"
            :class="auth.profile?.plan_type === 'unlimited' ? 'border-accent-secondary/30 bg-gradient-to-br from-surface to-accent-secondary/5' : ''">
-        <div class="text-sm font-bold text-text-primary">Plan {{ auth.profile?.plan_type === 'basic' ? 'Basic' : auth.profile?.plan_type === 'unlimited' ? 'Unlimited' : 'Ninguno' }}</div>
-        <div class="text-xs text-text-secondary">{{ auth.totalCredits }} Créditos</div>
+        <div class="text-sm font-bold text-text-primary">Plan {{ auth.profile?.plan_type === 'early_bird' ? 'Early Bird' : auth.profile?.plan_type === 'basic' ? 'Basic' : auth.profile?.plan_type === 'unlimited' ? 'Unlimited' : 'Ninguno' }}</div>
+        <div class="text-xs text-text-secondary">{{ auth.isUnlimited ? '∞ Ilimitado' : auth.totalCredits + ' Créditos' }}</div>
       </div>
     </div>
 

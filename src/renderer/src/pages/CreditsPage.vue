@@ -117,32 +117,43 @@ onMounted(async () => {
     <!-- Credit Packages -->
     <div>
       <h2 class="text-base font-semibold text-text-primary mb-3">Comprar Créditos Extra</h2>
-      <div v-if="loadingPackages" class="text-sm text-text-muted">Cargando paquetes...</div>
-      <div v-else class="grid grid-cols-3 gap-4 max-w-2xl">
-        <div
-          v-for="(pkg, idx) in packages"
-          :key="pkg.id"
-          class="rounded-xl bg-surface border p-5 hover:bg-surface-hover transition-all cursor-pointer relative"
-          :class="idx === 1 ? 'border-accent-secondary/30 hover:border-accent-secondary/50' : 'border-border-default hover:border-border-hover'"
-        >
-          <span v-if="idx === 1" class="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent-secondary text-bg-primary">Más vendido</span>
-          <div class="text-sm font-semibold text-text-primary">{{ pkg.name }}</div>
-          <div class="text-2xl font-bold font-mono text-text-primary mt-2">{{ pkg.credits.toLocaleString() }}</div>
-          <div class="text-xs text-text-muted">créditos</div>
-          <div class="text-lg font-bold text-accent mt-3">${{ Number(pkg.price_usd).toFixed(0) }}</div>
-          <button
-            :disabled="buyingPackageId === pkg.id"
-            class="w-full mt-3 h-9 rounded-lg bg-accent hover:bg-accent-hover text-xs font-semibold text-white transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
-            @click="handleBuyPackage(pkg)"
-          >
-            <Loader2 v-if="buyingPackageId === pkg.id" class="w-3.5 h-3.5 animate-spin" />
-            {{ buyingPackageId === pkg.id ? 'Procesando...' : 'Comprar' }}
-          </button>
+
+      <!-- Unlimited users don't need to buy credits -->
+      <div v-if="auth.isUnlimited" class="rounded-xl bg-accent/5 border border-accent/20 p-6 text-center max-w-2xl">
+        <div class="text-sm font-semibold text-text-primary">No necesitas comprar créditos</div>
+        <div class="text-xs text-text-secondary mt-1">
+          Con tu plan Unlimited puedes alquilar cuentas sin límite y sin gastar créditos.
         </div>
       </div>
-      <p class="text-[11px] text-text-muted mt-3 max-w-2xl">
-        Pagos con Stripe próximamente. Actualmente el admin puede ajustar créditos manualmente.
-      </p>
+
+      <template v-else>
+        <div v-if="loadingPackages" class="text-sm text-text-muted">Cargando paquetes...</div>
+        <div v-else class="grid grid-cols-3 gap-4 max-w-2xl">
+          <div
+            v-for="(pkg, idx) in packages"
+            :key="pkg.id"
+            class="rounded-xl bg-surface border p-5 hover:bg-surface-hover transition-all cursor-pointer relative"
+            :class="idx === 1 ? 'border-accent-secondary/30 hover:border-accent-secondary/50' : 'border-border-default hover:border-border-hover'"
+          >
+            <span v-if="idx === 1" class="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent-secondary text-bg-primary">Más vendido</span>
+            <div class="text-sm font-semibold text-text-primary">{{ pkg.name }}</div>
+            <div class="text-2xl font-bold font-mono text-text-primary mt-2">{{ pkg.credits.toLocaleString() }}</div>
+            <div class="text-xs text-text-muted">créditos</div>
+            <div class="text-lg font-bold text-accent mt-3">${{ Number(pkg.price_usd).toFixed(0) }}</div>
+            <button
+              :disabled="buyingPackageId === pkg.id"
+              class="w-full mt-3 h-9 rounded-lg bg-accent hover:bg-accent-hover text-xs font-semibold text-white transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+              @click="handleBuyPackage(pkg)"
+            >
+              <Loader2 v-if="buyingPackageId === pkg.id" class="w-3.5 h-3.5 animate-spin" />
+              {{ buyingPackageId === pkg.id ? 'Procesando...' : 'Comprar' }}
+            </button>
+          </div>
+        </div>
+        <p class="text-[11px] text-text-muted mt-3 max-w-2xl">
+          Pagos con Stripe próximamente. Actualmente el admin puede ajustar créditos manualmente.
+        </p>
+      </template>
     </div>
 
     <!-- Transaction History -->
