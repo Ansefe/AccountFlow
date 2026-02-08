@@ -30,6 +30,12 @@ const fetchWithTimeout: typeof fetch = async (input, init) => {
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+	auth: {
+		persistSession: true,
+		autoRefreshToken: true,
+		detectSessionInUrl: true,
+		storage: window.localStorage
+	},
 	global: {
 		fetch: fetchWithTimeout
 	}

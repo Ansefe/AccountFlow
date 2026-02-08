@@ -9,10 +9,15 @@ import { useAuthStore } from './stores/auth.store'
 const app = createApp(App)
 const pinia = createPinia()
 app.use(pinia)
-app.use(router)
 
-// Initialize auth before first navigation
-const auth = useAuthStore()
-auth.initialize().then(() => {
+async function bootstrap(): Promise<void> {
+  // Initialize auth before the router performs its initial navigation/guards.
+  const auth = useAuthStore(pinia)
+  await auth.initialize()
+
+  app.use(router)
+  await router.isReady()
   app.mount('#app')
-})
+}
+
+void bootstrap()
