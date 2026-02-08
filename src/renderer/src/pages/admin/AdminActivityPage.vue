@@ -60,9 +60,9 @@ onMounted(async () => {
       <div class="flex items-center gap-3">
         <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface border border-border-default">
           <Filter class="w-4 h-4 text-text-muted" />
-          <select v-model="filterType" class="bg-transparent text-sm text-text-primary outline-none">
-            <option value="all">Todos los eventos</option>
-            <option v-for="t in eventTypes" :key="t" :value="t">{{ eventLabels[t] }}</option>
+          <select v-model="filterType" class="bg-transparent text-sm text-text-primary outline-none cursor-pointer [&>option]:bg-surface [&>option]:text-text-primary">
+            <option value="all" class="bg-surface text-text-primary">Todos los eventos</option>
+            <option v-for="t in eventTypes" :key="t" :value="t" class="bg-surface text-text-primary">{{ eventLabels[t] }}</option>
           </select>
         </div>
         <span class="text-xs text-text-muted">{{ filteredLogs.length }} eventos</span>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   LayoutDashboard,
@@ -48,9 +48,17 @@ const adminNav: NavItem[] = [
   { name: 'admin-activity', label: 'Activity Log', icon: ScrollText, path: '/admin/activity' }
 ]
 
+const showUserMenu = ref(false)
+
 function isActive(path: string): boolean {
-  if (path === '/') return route.path === '/'
+  if (path === '/' || path === '/admin') return route.path === path
   return route.path.startsWith(path)
+}
+
+async function handleLogout(): Promise<void> {
+  showUserMenu.value = false
+  await auth.signOut()
+  router.push('/login')
 }
 
 function navigate(path: string): void {
@@ -133,21 +141,41 @@ function navigate(path: string): void {
     </div>
 
     <!-- User -->
-    <div class="mx-3 mb-3 space-y-1">
-      <button class="flex items-center gap-2 w-full px-3 py-2 rounded-lg hover:bg-surface-hover transition-colors">
+    <div class="mx-3 mb-3 relative">
+      <button
+        class="flex items-center gap-2 w-full px-3 py-2 rounded-lg hover:bg-surface-hover transition-colors"
+        @click="showUserMenu = !showUserMenu"
+      >
         <div class="w-7 h-7 rounded-full bg-accent/30 flex items-center justify-center text-xs font-bold text-accent">
           {{ auth.displayName.charAt(0).toUpperCase() }}
         </div>
         <span class="text-sm font-medium text-text-primary truncate">{{ auth.displayName }}</span>
-        <ChevronDown class="w-3.5 h-3.5 text-text-muted ml-auto shrink-0" />
+        <ChevronDown class="w-3.5 h-3.5 text-text-muted ml-auto shrink-0 transition-transform" :class="showUserMenu ? 'rotate-180' : ''" />
       </button>
-      <button
-        class="flex items-center gap-2 w-full px-3 py-1.5 rounded-lg text-xs text-text-muted hover:text-error hover:bg-error/10 transition-colors"
-        @click="auth.signOut().then(() => router.push('/login'))"
-      >
-        <LogOut class="w-3.5 h-3.5" />
-        Cerrar sesión
-      </button>
+
+      <!-- User dropdown menu -->
+      <div v-if="showUserMenu" class="absolute bottom-full left-0 right-0 mb-1 rounded-xl bg-surface border border-border-default shadow-2xl py-1 z-50">
+        <div class="px-3 py-2 border-b border-border-default">
+          <div class="text-xs text-text-muted truncate">{{ auth.user?.email }}</div>
+        </div>
+        <button
+          class="flex items-center gap-2 w-full px-3 py-2 text-sm text-text-secondary hover:bg-surface-hover transition-colors"
+          @click="showUserMenu = false; navigate('/settings')"
+        >
+          <Settings class="w-3.5 h-3.5" />
+          Ajustes
+        </button>
+        <button
+          class="flex items-center gap-2 w-full px-3 py-2 text-sm text-error hover:bg-error/10 transition-colors"
+          @click="handleLogout"
+        >
+          <LogOut class="w-3.5 h-3.5" />
+          Cerrar sesión
+        </button>
+      </div>
+
+      <!-- Click-away -->
+      <div v-if="showUserMenu" class="fixed inset-0 z-40" @click="showUserMenu = false"></div>
     </div>
   </aside>
 </template>

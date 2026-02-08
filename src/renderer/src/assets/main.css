@@ -92,4 +92,9 @@
   ::-webkit-scrollbar-thumb:hover {
     background: var(--color-text-muted);
   }
+
+  select option {
+    background-color: var(--color-surface);
+    color: var(--color-text-primary);
+  }
 }
