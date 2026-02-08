@@ -1,13 +1,11 @@
 // Supabase Edge Function: create-checkout
-// Creates a Paddle transaction and returns checkout URL
+// Creates a Lemon Squeezy checkout and returns the checkout URL
 // Deploy: supabase functions deploy create-checkout
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
 
-const PADDLE_API_KEY = Deno.env.get('PADDLE_API_KEY')!
-const PADDLE_ENV = Deno.env.get('PADDLE_ENVIRONMENT') || 'sandbox'
-const PADDLE_BASE_URL =
-  PADDLE_ENV === 'live' ? 'https://api.paddle.com' : 'https://sandbox-api.paddle.com'
+const LS_API_KEY = Deno.env.get('LEMONSQUEEZY_API_KEY')!
+const LS_STORE_ID = Deno.env.get('LEMONSQUEEZY_STORE_ID')!
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -17,28 +15,28 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 }
 
-// Paddle Price IDs — set as Supabase secrets after creating products in Paddle Dashboard
-// Format: pri_01abc123def456
-const PLAN_PRICE_MAP: Record<string, string | undefined> = {
-  early_bird: Deno.env.get('PADDLE_PRICE_EARLY_BIRD'),
-  basic: Deno.env.get('PADDLE_PRICE_BASIC'),
-  unlimited: Deno.env.get('PADDLE_PRICE_UNLIMITED')
+// Lemon Squeezy Variant IDs — set as Supabase secrets after creating products
+const PLAN_VARIANT_MAP: Record<string, string | undefined> = {
+  early_bird: Deno.env.get('LS_VARIANT_EARLY_BIRD'),
+  basic: Deno.env.get('LS_VARIANT_BASIC'),
+  unlimited: Deno.env.get('LS_VARIANT_UNLIMITED')
 }
 
-async function paddleRequest(endpoint: string, method: string, body?: unknown) {
-  const res = await fetch(`${PADDLE_BASE_URL}${endpoint}`, {
+async function lsRequest(endpoint: string, method: string, body?: unknown) {
+  const res = await fetch(`https://api.lemonsqueezy.com/v1${endpoint}`, {
     method,
     headers: {
-      Authorization: `Bearer ${PADDLE_API_KEY}`,
-      'Content-Type': 'application/json'
+      Authorization: `Bearer ${LS_API_KEY}`,
+      Accept: 'application/vnd.api+json',
+      'Content-Type': 'application/vnd.api+json'
     },
     body: body ? JSON.stringify(body) : undefined
   })
 
   const data = await res.json()
   if (!res.ok) {
-    console.error('Paddle API error:', JSON.stringify(data))
-    throw new Error(data.error?.detail || `Paddle API error: ${res.status}`)
+    console.error('Lemon Squeezy API error:', JSON.stringify(data))
+    throw new Error(data.errors?.[0]?.detail || `LS API error: ${res.status}`)
   }
   return data
 }
@@ -52,7 +50,7 @@ Deno.serve(async (req) => {
     // Authenticate user
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'No autorizado' }), {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
@@ -66,7 +64,7 @@ Deno.serve(async (req) => {
     } = await supabase.auth.getUser(token)
 
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'No autorizado' }), {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
@@ -78,71 +76,67 @@ Deno.serve(async (req) => {
     // Get profile
     const { data: profile } = await supabase
       .from('profiles')
-      .select('paddle_customer_id, display_name, plan_type, paddle_subscription_id')
+      .select('ls_customer_id, display_name, plan_type, ls_subscription_id')
       .eq('id', user.id)
       .single()
 
-    // Get or create Paddle customer
-    let customerId = profile?.paddle_customer_id
-
-    if (!customerId) {
-      const customerData = await paddleRequest('/customers', 'POST', {
-        email: user.email!,
-        name: profile?.display_name || user.email!.split('@')[0],
-        custom_data: { supabase_user_id: user.id }
-      })
-      customerId = customerData.data.id
-
-      await supabase
-        .from('profiles')
-        .update({ paddle_customer_id: customerId })
-        .eq('id', user.id)
-    }
-
-    // Build success/cancel URLs
+    // Build success URL
     const resultUrl = `${supabaseUrl}/functions/v1/payment-result`
 
     if (type === 'subscription') {
       const { plan_type: planType } = body as { plan_type: string; type: string }
-      const priceId = PLAN_PRICE_MAP[planType]
+      const variantId = PLAN_VARIANT_MAP[planType]
 
-      if (!priceId) {
+      if (!variantId) {
         return new Response(
-          JSON.stringify({ error: `Precio no configurado para plan: ${planType}` }),
+          JSON.stringify({ error: `Variant not configured for plan: ${planType}` }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
 
-      // If user already has a Paddle subscription, cancel it first
-      if (profile?.paddle_subscription_id) {
+      // If user already has an active LS subscription, cancel it first
+      if (profile?.ls_subscription_id) {
         try {
-          await paddleRequest(
-            `/subscriptions/${profile.paddle_subscription_id}/cancel`,
-            'POST',
-            { effective_from: 'immediately' }
-          )
+          await lsRequest(`/subscriptions/${profile.ls_subscription_id}`, 'PATCH', {
+            data: {
+              type: 'subscriptions',
+              id: profile.ls_subscription_id,
+              attributes: { cancelled: true }
+            }
+          })
         } catch {
           // Subscription may already be cancelled
         }
       }
 
-      // Create a transaction with the subscription price
-      const txnData = await paddleRequest('/transactions', 'POST', {
-        items: [{ price_id: priceId, quantity: 1 }],
-        customer_id: customerId,
-        custom_data: {
-          supabase_user_id: user.id,
-          checkout_type: 'subscription',
-          plan_type: planType
-        },
-        checkout: {
-          url: resultUrl
+      // Create a checkout via Lemon Squeezy API
+      const checkoutData = await lsRequest('/checkouts', 'POST', {
+        data: {
+          type: 'checkouts',
+          attributes: {
+            checkout_data: {
+              email: user.email,
+              name: profile?.display_name || user.email!.split('@')[0],
+              custom: {
+                supabase_user_id: user.id,
+                checkout_type: 'subscription',
+                plan_type: planType
+              }
+            },
+            product_options: {
+              redirect_url: resultUrl
+            }
+          },
+          relationships: {
+            store: { data: { type: 'stores', id: LS_STORE_ID } },
+            variant: { data: { type: 'variants', id: variantId } }
+          }
         }
       })
 
-      const checkoutUrl = txnData.data.checkout?.url
+      const checkoutUrl = checkoutData.data.attributes.url
       if (!checkoutUrl) {
-        throw new Error('No checkout URL returned by Paddle')
+        throw new Error('No checkout URL returned by Lemon Squeezy')
       }
 
       return new Response(JSON.stringify({ url: checkoutUrl }), {
@@ -161,7 +155,7 @@ Deno.serve(async (req) => {
       ) {
         return new Response(
           JSON.stringify({
-            error: 'Necesitas un plan activo (no Unlimited) para comprar créditos'
+            error: 'You need an active plan (not Unlimited) to buy credits'
           }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
@@ -176,38 +170,49 @@ Deno.serve(async (req) => {
         .single()
 
       if (pkgError || !pkg) {
-        return new Response(JSON.stringify({ error: 'Paquete no encontrado' }), {
+        return new Response(JSON.stringify({ error: 'Package not found' }), {
           status: 404,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
       }
 
-      if (!pkg.paddle_price_id) {
+      if (!pkg.ls_variant_id) {
         return new Response(
-          JSON.stringify({ error: 'Paquete no tiene precio de Paddle configurado' }),
+          JSON.stringify({ error: 'Package does not have a Lemon Squeezy variant configured' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
 
-      const txnData = await paddleRequest('/transactions', 'POST', {
-        items: [{ price_id: pkg.paddle_price_id, quantity: 1 }],
-        customer_id: customerId,
-        custom_data: {
-          supabase_user_id: user.id,
-          checkout_type: 'credit_package',
-          package_id: packageId,
-          package_name: pkg.name,
-          credits: String(pkg.credits),
-          amount_usd: String(pkg.price_usd)
-        },
-        checkout: {
-          url: resultUrl
+      const checkoutData = await lsRequest('/checkouts', 'POST', {
+        data: {
+          type: 'checkouts',
+          attributes: {
+            checkout_data: {
+              email: user.email,
+              name: profile?.display_name || user.email!.split('@')[0],
+              custom: {
+                supabase_user_id: user.id,
+                checkout_type: 'credit_package',
+                package_id: packageId,
+                package_name: pkg.name,
+                credits: String(pkg.credits),
+                amount_usd: String(pkg.price_usd)
+              }
+            },
+            product_options: {
+              redirect_url: resultUrl
+            }
+          },
+          relationships: {
+            store: { data: { type: 'stores', id: LS_STORE_ID } },
+            variant: { data: { type: 'variants', id: pkg.ls_variant_id } }
+          }
         }
       })
 
-      const checkoutUrl = txnData.data.checkout?.url
+      const checkoutUrl = checkoutData.data.attributes.url
       if (!checkoutUrl) {
-        throw new Error('No checkout URL returned by Paddle')
+        throw new Error('No checkout URL returned by Lemon Squeezy')
       }
 
       return new Response(JSON.stringify({ url: checkoutUrl }), {
@@ -215,7 +220,7 @@ Deno.serve(async (req) => {
       })
     }
 
-    return new Response(JSON.stringify({ error: 'Tipo de checkout no válido' }), {
+    return new Response(JSON.stringify({ error: 'Invalid checkout type' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })

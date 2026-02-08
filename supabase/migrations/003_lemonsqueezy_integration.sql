@@ -1,37 +1,37 @@
 -- ============================================================
--- Migration 003: Paddle Billing Integration
+-- Migration 003: Lemon Squeezy Billing Integration
 -- Run this in Supabase SQL Editor AFTER 001 and 002
 -- ============================================================
 
--- 1. Add Paddle subscription/customer IDs to profiles
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS paddle_subscription_id TEXT;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS paddle_customer_id TEXT;
+-- 1. Add Lemon Squeezy subscription/customer IDs to profiles
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ls_customer_id TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ls_subscription_id TEXT;
 
--- 2. Add Paddle price ID to credit packages
-ALTER TABLE credit_packages ADD COLUMN IF NOT EXISTS paddle_price_id TEXT;
+-- 2. Add Lemon Squeezy variant ID to credit packages
+ALTER TABLE credit_packages ADD COLUMN IF NOT EXISTS ls_variant_id TEXT;
 
--- 3. Update app_settings plans with Paddle price IDs
---    After creating products in Paddle Dashboard, fill in the price IDs here
---    Price IDs look like: pri_01abc123def456
+-- 3. Update app_settings plans with Lemon Squeezy variant IDs
+--    After creating products in Lemon Squeezy Dashboard, fill in the variant IDs here
+--    Variant IDs are numeric strings, e.g. "123456"
 UPDATE app_settings
 SET value = '{
-  "early_bird": {"price_usd": 6, "credits": 1000, "visible": true, "paddle_price_id": null},
-  "basic": {"price_usd": 10, "credits": 1000, "visible": true, "paddle_price_id": null},
-  "unlimited": {"price_usd": 30, "credits": null, "visible": true, "paddle_price_id": null}
+  "early_bird": {"price_usd": 6, "credits": 1000, "visible": true, "ls_variant_id": null},
+  "basic": {"price_usd": 10, "credits": 1000, "visible": true, "ls_variant_id": null},
+  "unlimited": {"price_usd": 30, "credits": null, "visible": true, "ls_variant_id": null}
 }'::jsonb
 WHERE key = 'plans';
 
 -- ============================================================
 -- SERVER-SIDE FUNCTIONS (called by Edge Functions via service_role)
--- These bypass RLS and handle Paddle-triggered mutations safely
+-- These bypass RLS and handle Lemon Squeezy-triggered mutations safely
 -- ============================================================
 
--- 4. Activate a subscription after Paddle checkout completes
+-- 4. Activate a subscription after Lemon Squeezy checkout completes
 CREATE OR REPLACE FUNCTION activate_subscription(
   p_user_id UUID,
   p_plan_type plan_type,
-  p_paddle_subscription_id TEXT,
-  p_paddle_customer_id TEXT DEFAULT NULL
+  p_ls_subscription_id TEXT,
+  p_ls_customer_id TEXT DEFAULT NULL
 )
 RETURNS void AS $$
 DECLARE
@@ -56,8 +56,8 @@ BEGIN
         WHEN p_plan_type = 'unlimited' THEN current_profile.subscription_credits
         ELSE plan_credits
       END,
-      paddle_subscription_id = p_paddle_subscription_id,
-      paddle_customer_id = COALESCE(p_paddle_customer_id, paddle_customer_id)
+      ls_subscription_id = p_ls_subscription_id,
+      ls_customer_id = COALESCE(p_ls_customer_id, ls_customer_id)
   WHERE id = p_user_id;
 
   -- Log credit grant (for non-unlimited plans)
@@ -68,7 +68,7 @@ BEGIN
       plan_credits,
       'subscription',
       'subscription_grant',
-      'Activación plan ' || p_plan_type::text || ' — +' || plan_credits || ' créditos'
+      'Plan ' || p_plan_type::text || ' activated — +' || plan_credits || ' credits'
     );
   END IF;
 
@@ -80,13 +80,13 @@ BEGIN
     jsonb_build_object(
       'from', current_profile.plan_type::text,
       'to', p_plan_type::text,
-      'paddle_subscription_id', p_paddle_subscription_id
+      'ls_subscription_id', p_ls_subscription_id
     )
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 5. Handle subscription renewal (transaction.completed webhook for recurring)
+-- 5. Handle subscription renewal (subscription_payment_success webhook)
 CREATE OR REPLACE FUNCTION handle_subscription_renewal(
   p_user_id UUID,
   p_plan_type plan_type
@@ -118,13 +118,13 @@ BEGIN
       plan_credits,
       'subscription',
       'subscription_reset',
-      'Renovación mensual ' || p_plan_type::text || ' — ' || plan_credits || ' créditos'
+      'Monthly renewal ' || p_plan_type::text || ' — ' || plan_credits || ' credits'
     );
   END IF;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 6. Cancel subscription (subscription.canceled webhook)
+-- 6. Cancel subscription (subscription_cancelled webhook)
 CREATE OR REPLACE FUNCTION cancel_subscription(p_user_id UUID)
 RETURNS void AS $$
 DECLARE
@@ -137,7 +137,7 @@ BEGIN
   SET plan_type = 'none',
       plan_expires_at = NULL,
       subscription_credits = 0,
-      paddle_subscription_id = NULL
+      ls_subscription_id = NULL
   WHERE id = p_user_id;
 
   INSERT INTO activity_log (user_id, event_type, metadata)
@@ -147,19 +147,19 @@ BEGIN
     jsonb_build_object(
       'from', current_profile.plan_type::text,
       'to', 'none',
-      'reason', 'paddle_cancellation'
+      'reason', 'ls_cancellation'
     )
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 7. Add purchased credits after Paddle payment
+-- 7. Add purchased credits after Lemon Squeezy payment
 CREATE OR REPLACE FUNCTION add_purchased_credits(
   p_user_id UUID,
   p_credits INTEGER,
   p_package_name TEXT,
   p_amount_usd DECIMAL,
-  p_paddle_transaction_id TEXT
+  p_ls_order_id TEXT
 )
 RETURNS void AS $$
 BEGIN
@@ -173,14 +173,14 @@ BEGIN
     p_credits,
     'purchased',
     'package_purchase',
-    'Compra paquete ' || p_package_name || ' — +' || p_credits || ' créditos'
+    'Package ' || p_package_name || ' — +' || p_credits || ' credits'
   );
 
   INSERT INTO payments (user_id, provider, provider_payment_id, amount_usd, type, status, metadata)
   VALUES (
     p_user_id,
-    'paddle',
-    p_paddle_transaction_id,
+    'lemonsqueezy',
+    p_ls_order_id,
     p_amount_usd,
     'credit_package',
     'completed',
@@ -200,6 +200,5 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- NOTE: pg_cron is NOT available on Supabase Free tier.
 -- The renew_expired_subscriptions() function from migration 002
 -- will be called via an Edge Function + GitHub Actions cron
--- instead of pg_cron. Remove/comment the cron.schedule lines
--- from migration 002 if you haven't run them yet.
+-- instead of pg_cron.
 -- ============================================================

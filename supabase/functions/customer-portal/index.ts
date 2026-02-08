@@ -1,13 +1,10 @@
 // Supabase Edge Function: customer-portal
-// Returns a Paddle Customer Portal session URL for managing subscription
+// Returns a Lemon Squeezy Customer Portal URL for managing subscription
 // Deploy: supabase functions deploy customer-portal
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
 
-const PADDLE_API_KEY = Deno.env.get('PADDLE_API_KEY')!
-const PADDLE_ENV = Deno.env.get('PADDLE_ENVIRONMENT') || 'sandbox'
-const PADDLE_BASE_URL =
-  PADDLE_ENV === 'live' ? 'https://api.paddle.com' : 'https://sandbox-api.paddle.com'
+const LS_API_KEY = Deno.env.get('LEMONSQUEEZY_API_KEY')!
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -25,7 +22,7 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'No autorizado' }), {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
@@ -39,54 +36,53 @@ Deno.serve(async (req) => {
     } = await supabase.auth.getUser(token)
 
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'No autorizado' }), {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
 
-    // Get Paddle customer ID and subscription ID
+    // Get Lemon Squeezy customer ID
     const { data: profile } = await supabase
       .from('profiles')
-      .select('paddle_customer_id, paddle_subscription_id')
+      .select('ls_customer_id')
       .eq('id', user.id)
       .single()
 
-    if (!profile?.paddle_customer_id) {
+    if (!profile?.ls_customer_id) {
       return new Response(
-        JSON.stringify({ error: 'No tienes una cuenta de Paddle vinculada' }),
+        JSON.stringify({ error: 'No Lemon Squeezy account linked' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Create customer portal session via Paddle API
-    const portalBody: Record<string, unknown> = {}
-
-    // If user has a subscription, include it for deep links
-    if (profile.paddle_subscription_id) {
-      portalBody.subscription_ids = [profile.paddle_subscription_id]
-    }
-
+    // Fetch the customer object which contains the customer_portal URL
     const res = await fetch(
-      `${PADDLE_BASE_URL}/customers/${profile.paddle_customer_id}/portal-sessions`,
+      `https://api.lemonsqueezy.com/v1/customers/${profile.ls_customer_id}`,
       {
-        method: 'POST',
+        method: 'GET',
         headers: {
-          Authorization: `Bearer ${PADDLE_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(portalBody)
+          Authorization: `Bearer ${LS_API_KEY}`,
+          Accept: 'application/vnd.api+json'
+        }
       }
     )
 
     const data = await res.json()
 
     if (!res.ok) {
-      console.error('Paddle portal error:', JSON.stringify(data))
-      throw new Error(data.error?.detail || 'Error creating portal session')
+      console.error('LS customer error:', JSON.stringify(data))
+      throw new Error(data.errors?.[0]?.detail || 'Error fetching customer')
     }
 
-    const portalUrl = data.data.urls.general.overview
+    const portalUrl = data.data.attributes.urls?.customer_portal
+
+    if (!portalUrl) {
+      return new Response(
+        JSON.stringify({ error: 'No customer portal available. Purchase a subscription first.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
 
     return new Response(JSON.stringify({ url: portalUrl }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }

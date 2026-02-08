@@ -3,7 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Coins, Loader2, ArrowUpRight, ArrowDownRight, RefreshCw, ExternalLink } from 'lucide-vue-next'
 import { useAuthStore } from '@renderer/stores/auth.store'
 import { supabase } from '@renderer/lib/supabase'
-import { checkoutCreditPackage } from '@renderer/lib/paddle'
+import { checkoutCreditPackage } from '@renderer/lib/lemonsqueezy'
 import type { CreditTransaction, CreditPackage } from '@renderer/types/database'
 
 const auth = useAuthStore()
@@ -61,8 +61,8 @@ async function handleBuyPackage(pkg: CreditPackage): Promise<void> {
   buyError.value = ''
 
   try {
-    if (!pkg.paddle_price_id) {
-      buyError.value = 'Este paquete aún no tiene precio de Paddle configurado. Contacta al admin.'
+    if (!pkg.ls_variant_id) {
+      buyError.value = 'Este paquete aún no tiene variante de Lemon Squeezy configurada. Contacta al admin.'
       return
     }
 
@@ -79,7 +79,7 @@ let profilePollInterval: number | null = null
 
 onMounted(async () => {
   await Promise.all([fetchPackages(), fetchTransactions()])
-  // Poll for profile changes (e.g., after Paddle payment in browser)
+  // Poll for profile changes (e.g., after Lemon Squeezy payment in browser)
   profilePollInterval = window.setInterval(async () => {
     await auth.fetchProfile()
     await fetchTransactions()
@@ -163,7 +163,7 @@ onUnmounted(() => {
         </div>
         <div v-if="buyError" class="mt-3 p-2.5 rounded-lg bg-error/10 border border-error/30 text-xs text-error max-w-2xl">{{ buyError }}</div>
         <p class="text-[11px] text-text-muted mt-3 max-w-2xl">
-          Se abrirá Paddle en tu navegador para completar el pago. Los créditos se agregan automáticamente.
+          Se abrirá el checkout en tu navegador para completar el pago. Los créditos se agregan automáticamente.
         </p>
       </template>
     </div>

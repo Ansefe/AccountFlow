@@ -21,7 +21,7 @@ export async function callEdgeFunction<T = Record<string, unknown>>(
 }
 
 /**
- * Open a Paddle Checkout for a subscription plan.
+ * Open a Lemon Squeezy Checkout for a subscription plan.
  * Opens the checkout URL in the user's default browser.
  */
 export async function checkoutSubscription(planType: string): Promise<void> {
@@ -38,7 +38,7 @@ export async function checkoutSubscription(planType: string): Promise<void> {
 }
 
 /**
- * Open a Paddle Checkout for a credit package purchase.
+ * Open a Lemon Squeezy Checkout for a credit package purchase.
  * Opens the checkout URL in the user's default browser.
  */
 export async function checkoutCreditPackage(packageId: string): Promise<void> {
@@ -55,7 +55,7 @@ export async function checkoutCreditPackage(packageId: string): Promise<void> {
 }
 
 /**
- * Open the Paddle Customer Portal for managing subscription.
+ * Open the Lemon Squeezy Customer Portal for managing subscription.
  * Opens the portal URL in the user's default browser.
  */
 export async function openCustomerPortal(): Promise<void> {

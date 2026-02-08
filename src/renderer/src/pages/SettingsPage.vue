@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { Loader2, Check, LogOut, Crown, Zap, Star, Sparkles, Timer, ExternalLink, CreditCard } from 'lucide-vue-next'
 import { useAuthStore } from '@renderer/stores/auth.store'
 import { supabase } from '@renderer/lib/supabase'
-import { checkoutSubscription, openCustomerPortal } from '@renderer/lib/paddle'
+import { checkoutSubscription, openCustomerPortal } from '@renderer/lib/lemonsqueezy'
 import type { PlanType } from '@renderer/types/database'
 
 const router = useRouter()
@@ -52,7 +52,7 @@ const planOptions: PlanOption[] = [
 ]
 
 const currentPlan = computed(() => auth.profile?.plan_type || 'none')
-const hasPaddleSubscription = computed(() => !!auth.profile?.paddle_subscription_id)
+const hasLsSubscription = computed(() => !!auth.profile?.ls_subscription_id)
 
 const planLabel = computed(() => {
   const labels: Record<string, string> = {
@@ -67,7 +67,7 @@ const planLabel = computed(() => {
 onMounted(async () => {
   await auth.fetchProfile()
   displayName.value = auth.profile?.display_name || ''
-  // Poll for profile changes (e.g., after Paddle checkout in browser)
+  // Poll for profile changes (e.g., after Lemon Squeezy checkout in browser)
   profilePollInterval = window.setInterval(async () => {
     await auth.fetchProfile()
   }, 5000)
@@ -114,13 +114,13 @@ async function changePlan(newPlan: PlanType): Promise<void> {
 
   try {
     if (newPlan === 'none') {
-      // Cancellation: if Paddle subscription exists, open Customer Portal
-      if (hasPaddleSubscription.value) {
-        planMsg.value = 'Abriendo portal de Paddle para cancelar tu suscripción...'
+      // Cancellation: if LS subscription exists, open Customer Portal
+      if (hasLsSubscription.value) {
+        planMsg.value = 'Abriendo portal para cancelar tu suscripción...'
         await openCustomerPortal()
         planMsg.value = 'Se abrió el portal en tu navegador. Cancela tu suscripción ahí y vuelve a la app.'
       } else {
-        // Manual plan (no Paddle) — use RPC directly
+        // Manual plan (no LS) — use RPC directly
         const { data, error: rpcError } = await supabase.rpc('change_user_plan', {
           target_user_id: auth.user.id,
           new_plan: newPlan
@@ -135,8 +135,8 @@ async function changePlan(newPlan: PlanType): Promise<void> {
         planMsg.value = 'Plan cancelado. Tus créditos comprados se conservan.'
       }
     } else {
-      // Subscribing to a paid plan → Paddle Checkout
-      planMsg.value = 'Abriendo Paddle Checkout en tu navegador...'
+      // Subscribing to a paid plan → Lemon Squeezy Checkout
+      planMsg.value = 'Abriendo checkout en tu navegador...'
       await checkoutSubscription(newPlan)
       planMsg.value = 'Completa el pago en tu navegador. Tu plan se activará automáticamente al confirmar.'
     }
@@ -155,7 +155,7 @@ async function handleManageSubscription(): Promise<void> {
   planMsg.value = ''
 
   try {
-    planMsg.value = 'Abriendo portal de Paddle...'
+    planMsg.value = 'Abriendo portal de suscripción...'
     await openCustomerPortal()
     planMsg.value = 'Se abrió el portal en tu navegador. Gestiona tu suscripción ahí.'
     setTimeout(() => { planMsg.value = '' }, 8000)
@@ -277,7 +277,7 @@ async function handleLogout(): Promise<void> {
 
       <div class="mt-3 space-y-1">
         <p class="text-[11px] text-text-muted">
-          Los créditos de suscripción se recargan automáticamente cada mes vía Paddle.
+          Los créditos de suscripción se recargan automáticamente cada mes.
           Los créditos comprados se conservan siempre independientemente del plan.
         </p>
         <p v-if="auth.isUnlimited" class="text-[11px] text-accent">
@@ -285,8 +285,8 @@ async function handleLogout(): Promise<void> {
         </p>
       </div>
 
-      <!-- Manage Paddle Subscription -->
-      <div v-if="hasPaddleSubscription && currentPlan !== 'none'" class="mt-4 pt-4 border-t border-border-default">
+      <!-- Manage Subscription -->
+      <div v-if="hasLsSubscription && currentPlan !== 'none'" class="mt-4 pt-4 border-t border-border-default">
         <button
           :disabled="changingPlan"
           class="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-surface border border-border-default text-xs font-semibold text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-colors disabled:opacity-50"
@@ -297,7 +297,7 @@ async function handleLogout(): Promise<void> {
           <ExternalLink class="w-3 h-3 text-text-muted" />
         </button>
         <p class="text-[11px] text-text-muted mt-1.5">
-          Cambiar método de pago, actualizar plan o cancelar suscripción via Paddle.
+          Cambiar método de pago, actualizar plan o cancelar suscripción.
         </p>
       </div>
     </div>

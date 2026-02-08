@@ -11,7 +11,7 @@ export type CreditTransactionType =
   | 'package_purchase'
   | 'admin_adjustment'
   | 'refund'
-export type PaymentProvider = 'paddle' | 'manual_crypto'
+export type PaymentProvider = 'lemonsqueezy' | 'manual_crypto'
 export type PaymentType = 'subscription' | 'credit_package'
 export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded'
 export type ActivityEventType =
@@ -68,8 +68,8 @@ export interface Profile {
   role: UserRole
   plan_type: PlanType
   plan_expires_at: string | null
-  paddle_customer_id: string | null
-  paddle_subscription_id: string | null
+  ls_customer_id: string | null
+  ls_subscription_id: string | null
   last_heartbeat_at: string | null
   created_at: string
   updated_at: string
@@ -137,7 +137,7 @@ export interface CreditPackage {
   description: string | null
   credits: number
   price_usd: number
-  paddle_price_id: string | null
+  ls_variant_id: string | null
   is_active: boolean
 }
 
