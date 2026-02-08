@@ -1,331 +1,374 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AccountFlow — Alquiler de Cuentas LoL</title>
-  <meta name="description" content="Alquila cuentas de League of Legends de forma segura. Planes desde $6/mes con créditos de suscripción.">
-  <style>
-    :root {
-      --bg: #0A0A0F;
-      --surface: #16161F;
-      --border: #232333;
-      --text: #F0F0F5;
-      --text-secondary: #A0A0B0;
-      --text-muted: #606070;
-      --accent: #6C5CE7;
-      --accent-hover: #7B6FF0;
-      --success: #00E676;
-      --warning: #FFD600;
-    }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.6;
-    }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AccountFlow — Alquiler de Cuentas LoL</title>
+    <meta
+      name="description"
+      content="Alquila cuentas de League of Legends de forma segura. Planes desde $6/mes con créditos de suscripción."
+    />
+    <style>
+      :root {
+        --bg: #0a0a0f;
+        --surface: #16161f;
+        --border: #232333;
+        --text: #f0f0f5;
+        --text-secondary: #a0a0b0;
+        --text-muted: #606070;
+        --accent: #6c5ce7;
+        --accent-hover: #7b6ff0;
+        --success: #00e676;
+        --warning: #ffd600;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          'Inter',
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.6;
+      }
 
-    /* Nav */
-    nav {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 20px 40px;
-      border-bottom: 1px solid var(--border);
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-    .logo {
-      font-size: 20px;
-      font-weight: 800;
-      background: linear-gradient(135deg, var(--accent), #A78BFA);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    .nav-links a {
-      color: var(--text-secondary);
-      text-decoration: none;
-      font-size: 14px;
-      margin-left: 24px;
-      transition: color 0.2s;
-    }
-    .nav-links a:hover { color: var(--text); }
+      /* Nav */
+      nav {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px 40px;
+        border-bottom: 1px solid var(--border);
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      .logo {
+        font-size: 20px;
+        font-weight: 800;
+        background: linear-gradient(135deg, var(--accent), #a78bfa);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+      .nav-links a {
+        color: var(--text-secondary);
+        text-decoration: none;
+        font-size: 14px;
+        margin-left: 24px;
+        transition: color 0.2s;
+      }
+      .nav-links a:hover {
+        color: var(--text);
+      }
 
-    /* Hero */
-    .hero {
-      text-align: center;
-      padding: 100px 20px 60px;
-      max-width: 700px;
-      margin: 0 auto;
-    }
-    .hero h1 {
-      font-size: 48px;
-      font-weight: 800;
-      line-height: 1.1;
-      margin-bottom: 16px;
-    }
-    .hero h1 span {
-      background: linear-gradient(135deg, var(--accent), #A78BFA);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    .hero p {
-      font-size: 18px;
-      color: var(--text-secondary);
-      max-width: 500px;
-      margin: 0 auto 32px;
-    }
-    .hero-badge {
-      display: inline-block;
-      padding: 6px 16px;
-      border-radius: 20px;
-      background: var(--accent);
-      color: white;
-      font-size: 13px;
-      font-weight: 600;
-      margin-bottom: 24px;
-    }
+      /* Hero */
+      .hero {
+        text-align: center;
+        padding: 100px 20px 60px;
+        max-width: 700px;
+        margin: 0 auto;
+      }
+      .hero h1 {
+        font-size: 48px;
+        font-weight: 800;
+        line-height: 1.1;
+        margin-bottom: 16px;
+      }
+      .hero h1 span {
+        background: linear-gradient(135deg, var(--accent), #a78bfa);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+      .hero p {
+        font-size: 18px;
+        color: var(--text-secondary);
+        max-width: 500px;
+        margin: 0 auto 32px;
+      }
+      .hero-badge {
+        display: inline-block;
+        padding: 6px 16px;
+        border-radius: 20px;
+        background: var(--accent);
+        color: white;
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 24px;
+      }
 
-    /* Pricing */
-    .pricing {
-      padding: 80px 20px;
-      max-width: 1000px;
-      margin: 0 auto;
-    }
-    .pricing h2 {
-      text-align: center;
-      font-size: 32px;
-      font-weight: 700;
-      margin-bottom: 12px;
-    }
-    .pricing .subtitle {
-      text-align: center;
-      color: var(--text-secondary);
-      font-size: 16px;
-      margin-bottom: 48px;
-    }
-    .plans {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 20px;
-    }
-    .plan-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 32px 24px;
-      text-align: center;
-      position: relative;
-      transition: border-color 0.3s, transform 0.3s;
-    }
-    .plan-card:hover {
-      border-color: var(--accent);
-      transform: translateY(-4px);
-    }
-    .plan-card.highlight {
-      border-color: var(--warning);
-    }
-    .plan-badge {
-      position: absolute;
-      top: -10px;
-      left: 50%;
-      transform: translateX(-50%);
-      padding: 4px 12px;
-      border-radius: 12px;
-      font-size: 11px;
-      font-weight: 700;
-      background: var(--warning);
-      color: var(--bg);
-    }
-    .plan-name {
-      font-size: 18px;
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
-    .plan-price {
-      font-size: 36px;
-      font-weight: 800;
-      margin-bottom: 4px;
-    }
-    .plan-price span { font-size: 16px; font-weight: 400; color: var(--text-secondary); }
-    .plan-original {
-      font-size: 14px;
-      color: var(--text-muted);
-      text-decoration: line-through;
-      margin-bottom: 16px;
-    }
-    .plan-features {
-      list-style: none;
-      margin: 20px 0;
-      text-align: left;
-    }
-    .plan-features li {
-      font-size: 14px;
-      color: var(--text-secondary);
-      padding: 6px 0;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .plan-features li::before {
-      content: '✓';
-      color: var(--success);
-      font-weight: 700;
-      font-size: 13px;
-    }
+      /* Pricing */
+      .pricing {
+        padding: 80px 20px;
+        max-width: 1000px;
+        margin: 0 auto;
+      }
+      .pricing h2 {
+        text-align: center;
+        font-size: 32px;
+        font-weight: 700;
+        margin-bottom: 12px;
+      }
+      .pricing .subtitle {
+        text-align: center;
+        color: var(--text-secondary);
+        font-size: 16px;
+        margin-bottom: 48px;
+      }
+      .plans {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 20px;
+      }
+      .plan-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 32px 24px;
+        text-align: center;
+        position: relative;
+        transition:
+          border-color 0.3s,
+          transform 0.3s;
+      }
+      .plan-card:hover {
+        border-color: var(--accent);
+        transform: translateY(-4px);
+      }
+      .plan-card.highlight {
+        border-color: var(--warning);
+      }
+      .plan-badge {
+        position: absolute;
+        top: -10px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 700;
+        background: var(--warning);
+        color: var(--bg);
+      }
+      .plan-name {
+        font-size: 18px;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      .plan-price {
+        font-size: 36px;
+        font-weight: 800;
+        margin-bottom: 4px;
+      }
+      .plan-price span {
+        font-size: 16px;
+        font-weight: 400;
+        color: var(--text-secondary);
+      }
+      .plan-original {
+        font-size: 14px;
+        color: var(--text-muted);
+        text-decoration: line-through;
+        margin-bottom: 16px;
+      }
+      .plan-features {
+        list-style: none;
+        margin: 20px 0;
+        text-align: left;
+      }
+      .plan-features li {
+        font-size: 14px;
+        color: var(--text-secondary);
+        padding: 6px 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .plan-features li::before {
+        content: '✓';
+        color: var(--success);
+        font-weight: 700;
+        font-size: 13px;
+      }
 
-    /* Features */
-    .features {
-      padding: 60px 20px 80px;
-      max-width: 800px;
-      margin: 0 auto;
-    }
-    .features h2 {
-      text-align: center;
-      font-size: 28px;
-      font-weight: 700;
-      margin-bottom: 40px;
-    }
-    .feature-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 24px;
-    }
-    .feature-item {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 24px;
-    }
-    .feature-item h3 {
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
-    .feature-item p {
-      font-size: 14px;
-      color: var(--text-secondary);
-    }
+      /* Features */
+      .features {
+        padding: 60px 20px 80px;
+        max-width: 800px;
+        margin: 0 auto;
+      }
+      .features h2 {
+        text-align: center;
+        font-size: 28px;
+        font-weight: 700;
+        margin-bottom: 40px;
+      }
+      .feature-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+      }
+      .feature-item {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 24px;
+      }
+      .feature-item h3 {
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+      .feature-item p {
+        font-size: 14px;
+        color: var(--text-secondary);
+      }
 
-    /* Footer */
-    footer {
-      border-top: 1px solid var(--border);
-      padding: 40px 20px;
-      max-width: 1200px;
-      margin: 0 auto;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 16px;
-    }
-    footer .footer-left {
-      font-size: 13px;
-      color: var(--text-muted);
-    }
-    footer .footer-links a {
-      color: var(--text-muted);
-      text-decoration: none;
-      font-size: 13px;
-      margin-left: 20px;
-      transition: color 0.2s;
-    }
-    footer .footer-links a:hover { color: var(--text-secondary); }
+      /* Footer */
+      footer {
+        border-top: 1px solid var(--border);
+        padding: 40px 20px;
+        max-width: 1200px;
+        margin: 0 auto;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+      footer .footer-left {
+        font-size: 13px;
+        color: var(--text-muted);
+      }
+      footer .footer-links a {
+        color: var(--text-muted);
+        text-decoration: none;
+        font-size: 13px;
+        margin-left: 20px;
+        transition: color 0.2s;
+      }
+      footer .footer-links a:hover {
+        color: var(--text-secondary);
+      }
 
-    @media (max-width: 640px) {
-      .hero h1 { font-size: 32px; }
-      .plans { grid-template-columns: 1fr; }
-      .feature-grid { grid-template-columns: 1fr; }
-      nav { padding: 16px 20px; }
-      footer { flex-direction: column; text-align: center; }
-    }
-  </style>
-</head>
-<body>
-  <nav>
-    <div class="logo">AccountFlow</div>
-    <div class="nav-links">
-      <a href="#pricing">Precios</a>
-      <a href="#features">Características</a>
-      <a href="terms.html">ToS</a>
-      <a href="privacy.html">Privacidad</a>
-    </div>
-  </nav>
-
-  <section class="hero">
-    <div class="hero-badge">Aplicación de Escritorio para Windows</div>
-    <h1>Alquila cuentas LoL <span>de forma fácil</span></h1>
-    <p>AccountFlow es una aplicación de escritorio que te permite alquilar cuentas de League of Legends con créditos de suscripción mensual.</p>
-  </section>
-
-  <section class="pricing" id="pricing">
-    <h2>Planes</h2>
-    <p class="subtitle">Elige el plan que mejor se adapte a ti</p>
-    <div class="plans">
-      <div class="plan-card highlight">
-        <div class="plan-badge">40% OFF — Tiempo limitado</div>
-        <div class="plan-name">Early Bird</div>
-        <div class="plan-price">$6 <span>/mes</span></div>
-        <div class="plan-original">$10/mes</div>
-        <ul class="plan-features">
-          <li>1,000 créditos mensuales</li>
-          <li>Acceso a todas las cuentas</li>
-          <li>Créditos extra disponibles</li>
-        </ul>
+      @media (max-width: 640px) {
+        .hero h1 {
+          font-size: 32px;
+        }
+        .plans {
+          grid-template-columns: 1fr;
+        }
+        .feature-grid {
+          grid-template-columns: 1fr;
+        }
+        nav {
+          padding: 16px 20px;
+        }
+        footer {
+          flex-direction: column;
+          text-align: center;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <div class="logo">AccountFlow</div>
+      <div class="nav-links">
+        <a href="#pricing">Precios</a>
+        <a href="#features">Características</a>
+        <a href="terms.html">ToS</a>
+        <a href="privacy.html">Privacidad</a>
       </div>
-      <div class="plan-card">
-        <div class="plan-name">Basic</div>
-        <div class="plan-price">$10 <span>/mes</span></div>
-        <div style="margin-bottom: 16px;">&nbsp;</div>
-        <ul class="plan-features">
-          <li>1,000 créditos mensuales</li>
-          <li>Acceso a todas las cuentas</li>
-          <li>Créditos extra disponibles</li>
-        </ul>
-      </div>
-      <div class="plan-card">
-        <div class="plan-name">Unlimited</div>
-        <div class="plan-price">$30 <span>/mes</span></div>
-        <div style="margin-bottom: 16px;">&nbsp;</div>
-        <ul class="plan-features">
-          <li>Alquiler ilimitado</li>
-          <li>Sin gasto de créditos</li>
-          <li>Una cuenta activa a la vez</li>
-        </ul>
-      </div>
-    </div>
-  </section>
+    </nav>
 
-  <section class="features" id="features">
-    <h2>¿Por qué AccountFlow?</h2>
-    <div class="feature-grid">
-      <div class="feature-item">
-        <h3>🔒 Seguro</h3>
-        <p>Las credenciales de las cuentas están protegidas con cifrado. Tu información de pago es procesada por Paddle.</p>
-      </div>
-      <div class="feature-item">
-        <h3>⚡ Rápido</h3>
-        <p>Alquila una cuenta en segundos. Selecciona elo, servidor y duración — listo para jugar.</p>
-      </div>
-      <div class="feature-item">
-        <h3>📊 Transparente</h3>
-        <p>Monitorea tus créditos, historial de transacciones y tiempo restante en tiempo real.</p>
-      </div>
-      <div class="feature-item">
-        <h3>💳 Pagos Flexibles</h3>
-        <p>Paga con tarjeta de crédito o PayPal. Compra créditos extra cuando los necesites.</p>
-      </div>
-    </div>
-  </section>
+    <section class="hero">
+      <div class="hero-badge">Aplicación de Escritorio para Windows</div>
+      <h1>Alquila cuentas LoL <span>de forma fácil</span></h1>
+      <p>
+        AccountFlow es una aplicación de escritorio que te permite alquilar cuentas de League of
+        Legends con créditos de suscripción mensual.
+      </p>
+    </section>
 
-  <footer>
-    <div class="footer-left">© 2026 AccountFlow. Todos los derechos reservados.</div>
-    <div class="footer-links">
-      <a href="terms.html">Términos de Servicio</a>
-      <a href="privacy.html">Política de Privacidad</a>
-      <a href="refund.html">Política de Reembolso</a>
-    </div>
-  </footer>
-</body>
+    <section class="pricing" id="pricing">
+      <h2>Planes</h2>
+      <p class="subtitle">Elige el plan que mejor se adapte a ti</p>
+      <div class="plans">
+        <div class="plan-card highlight">
+          <div class="plan-badge">40% OFF — Tiempo limitado</div>
+          <div class="plan-name">Early Bird</div>
+          <div class="plan-price">$6 <span>/mes</span></div>
+          <div class="plan-original">$10/mes</div>
+          <ul class="plan-features">
+            <li>1,000 créditos mensuales</li>
+            <li>Acceso a todas las cuentas</li>
+            <li>Créditos extra disponibles</li>
+          </ul>
+        </div>
+        <div class="plan-card">
+          <div class="plan-name">Basic</div>
+          <div class="plan-price">$10 <span>/mes</span></div>
+          <div style="margin-bottom: 16px">&nbsp;</div>
+          <ul class="plan-features">
+            <li>1,000 créditos mensuales</li>
+            <li>Acceso a todas las cuentas</li>
+            <li>Créditos extra disponibles</li>
+          </ul>
+        </div>
+        <div class="plan-card">
+          <div class="plan-name">Unlimited</div>
+          <div class="plan-price">$30 <span>/mes</span></div>
+          <div style="margin-bottom: 16px">&nbsp;</div>
+          <ul class="plan-features">
+            <li>Alquiler ilimitado</li>
+            <li>Sin gasto de créditos</li>
+            <li>Una cuenta activa a la vez</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="features" id="features">
+      <h2>¿Por qué AccountFlow?</h2>
+      <div class="feature-grid">
+        <div class="feature-item">
+          <h3>🔒 Seguro</h3>
+          <p>
+            Las credenciales de las cuentas están protegidas con cifrado. Tu información de pago es
+            procesada por Paddle.
+          </p>
+        </div>
+        <div class="feature-item">
+          <h3>⚡ Rápido</h3>
+          <p>
+            Alquila una cuenta en segundos. Selecciona elo, servidor y duración — listo para jugar.
+          </p>
+        </div>
+        <div class="feature-item">
+          <h3>📊 Transparente</h3>
+          <p>
+            Monitorea tus créditos, historial de transacciones y tiempo restante en tiempo real.
+          </p>
+        </div>
+        <div class="feature-item">
+          <h3>💳 Pagos Flexibles</h3>
+          <p>Paga con tarjeta de crédito o PayPal. Compra créditos extra cuando los necesites.</p>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <div class="footer-left">© 2026 AccountFlow. Todos los derechos reservados.</div>
+      <div class="footer-links">
+        <a href="terms.html">Términos de Servicio</a>
+        <a href="privacy.html">Política de Privacidad</a>
+        <a href="refund.html">Política de Reembolso</a>
+      </div>
+    </footer>
+  </body>
 </html>

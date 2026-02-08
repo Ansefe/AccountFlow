@@ -1,94 +1,214 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Términos de Servicio — AccountFlow</title>
-  <style>
-    :root { --bg: #0A0A0F; --surface: #16161F; --border: #232333; --text: #F0F0F5; --text-secondary: #A0A0B0; --text-muted: #606070; --accent: #6C5CE7; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; }
-    nav { display: flex; justify-content: space-between; align-items: center; padding: 20px 40px; border-bottom: 1px solid var(--border); max-width: 1200px; margin: 0 auto; }
-    .logo { font-size: 20px; font-weight: 800; background: linear-gradient(135deg, var(--accent), #A78BFA); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-decoration: none; }
-    .nav-links a { color: var(--text-secondary); text-decoration: none; font-size: 14px; margin-left: 24px; }
-    .nav-links a:hover { color: var(--text); }
-    .content { max-width: 720px; margin: 0 auto; padding: 60px 20px 80px; }
-    h1 { font-size: 32px; font-weight: 700; margin-bottom: 8px; }
-    .updated { font-size: 13px; color: var(--text-muted); margin-bottom: 40px; }
-    h2 { font-size: 20px; font-weight: 600; margin: 32px 0 12px; color: var(--text); }
-    p, li { font-size: 15px; color: var(--text-secondary); margin-bottom: 12px; }
-    ul { padding-left: 24px; }
-    footer { border-top: 1px solid var(--border); padding: 40px 20px; max-width: 1200px; margin: 0 auto; text-align: center; font-size: 13px; color: var(--text-muted); }
-  </style>
-</head>
-<body>
-  <nav>
-    <a href="index.html" class="logo">AccountFlow</a>
-    <div class="nav-links">
-      <a href="index.html">Inicio</a>
-      <a href="privacy.html">Privacidad</a>
-      <a href="refund.html">Reembolsos</a>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Términos de Servicio — AccountFlow</title>
+    <style>
+      :root {
+        --bg: #0a0a0f;
+        --surface: #16161f;
+        --border: #232333;
+        --text: #f0f0f5;
+        --text-secondary: #a0a0b0;
+        --text-muted: #606070;
+        --accent: #6c5ce7;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          'Inter',
+          -apple-system,
+          sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.7;
+      }
+      nav {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px 40px;
+        border-bottom: 1px solid var(--border);
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      .logo {
+        font-size: 20px;
+        font-weight: 800;
+        background: linear-gradient(135deg, var(--accent), #a78bfa);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-decoration: none;
+      }
+      .nav-links a {
+        color: var(--text-secondary);
+        text-decoration: none;
+        font-size: 14px;
+        margin-left: 24px;
+      }
+      .nav-links a:hover {
+        color: var(--text);
+      }
+      .content {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 60px 20px 80px;
+      }
+      h1 {
+        font-size: 32px;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      .updated {
+        font-size: 13px;
+        color: var(--text-muted);
+        margin-bottom: 40px;
+      }
+      h2 {
+        font-size: 20px;
+        font-weight: 600;
+        margin: 32px 0 12px;
+        color: var(--text);
+      }
+      p,
+      li {
+        font-size: 15px;
+        color: var(--text-secondary);
+        margin-bottom: 12px;
+      }
+      ul {
+        padding-left: 24px;
+      }
+      footer {
+        border-top: 1px solid var(--border);
+        padding: 40px 20px;
+        max-width: 1200px;
+        margin: 0 auto;
+        text-align: center;
+        font-size: 13px;
+        color: var(--text-muted);
+      }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <a href="index.html" class="logo">AccountFlow</a>
+      <div class="nav-links">
+        <a href="index.html">Inicio</a>
+        <a href="privacy.html">Privacidad</a>
+        <a href="refund.html">Reembolsos</a>
+      </div>
+    </nav>
+
+    <div class="content">
+      <h1>Términos de Servicio</h1>
+      <p class="updated">Última actualización: 8 de febrero de 2026</p>
+
+      <h2>1. Aceptación de los Términos</h2>
+      <p>
+        Al descargar, instalar o utilizar la aplicación AccountFlow ("el Servicio"), aceptas estar
+        sujeto a estos Términos de Servicio. Si no estás de acuerdo, no utilices el Servicio.
+      </p>
+
+      <h2>2. Descripción del Servicio</h2>
+      <p>
+        AccountFlow es una aplicación de escritorio que permite a los usuarios alquilar
+        temporalmente cuentas de League of Legends mediante un sistema de créditos. El Servicio
+        incluye:
+      </p>
+      <ul>
+        <li>Planes de suscripción mensual con créditos incluidos</li>
+        <li>Compra de paquetes de créditos adicionales</li>
+        <li>Acceso temporal a cuentas del pool disponible</li>
+      </ul>
+
+      <h2>3. Cuentas de Usuario</h2>
+      <p>
+        Debes crear una cuenta para usar el Servicio. Eres responsable de mantener la
+        confidencialidad de tu contraseña y de todas las actividades realizadas bajo tu cuenta.
+        Debes tener al menos 13 años de edad para usar el Servicio.
+      </p>
+
+      <h2>4. Suscripciones y Pagos</h2>
+      <p>
+        Los pagos son procesados por Paddle.com Market Ltd ("Paddle"), quien actúa como Merchant of
+        Record. Al suscribirte a un plan de pago, autorizas a Paddle a cobrar la tarifa mensual
+        correspondiente de forma recurrente hasta que canceles.
+      </p>
+      <ul>
+        <li>Los precios están en dólares estadounidenses (USD)</li>
+        <li>Las suscripciones se renuevan automáticamente cada 30 días</li>
+        <li>Puedes cancelar tu suscripción en cualquier momento desde la aplicación</li>
+      </ul>
+
+      <h2>5. Créditos</h2>
+      <p>
+        Los créditos de suscripción se otorgan al iniciar o renovar un plan y expiran al final del
+        período de facturación. Los créditos comprados por separado no expiran mientras tu cuenta
+        esté activa. Los créditos no son transferibles ni reembolsables una vez utilizados.
+      </p>
+
+      <h2>6. Uso Aceptable</h2>
+      <p>Al usar el Servicio, aceptas:</p>
+      <ul>
+        <li>No compartir las credenciales de las cuentas alquiladas con terceros</li>
+        <li>
+          No intentar cambiar la contraseña o configuración de seguridad de las cuentas alquiladas
+        </li>
+        <li>
+          No usar las cuentas alquiladas para actividades que violen los términos de servicio de
+          Riot Games
+        </li>
+        <li>Devolver (liberar) las cuentas alquiladas al finalizar el período de alquiler</li>
+        <li>No intentar hacer ingeniería inversa o explotar vulnerabilidades del Servicio</li>
+      </ul>
+
+      <h2>7. Disponibilidad del Servicio</h2>
+      <p>
+        Nos esforzamos por mantener el Servicio disponible, pero no garantizamos disponibilidad
+        ininterrumpida. Podemos modificar, suspender o discontinuar cualquier aspecto del Servicio
+        con notificación previa razonable.
+      </p>
+
+      <h2>8. Propiedad Intelectual</h2>
+      <p>
+        AccountFlow y su contenido son propiedad de sus desarrolladores. League of Legends es marca
+        registrada de Riot Games, Inc. AccountFlow no está afiliado, asociado ni respaldado por Riot
+        Games.
+      </p>
+
+      <h2>9. Limitación de Responsabilidad</h2>
+      <p>
+        El Servicio se proporciona "tal cual". No somos responsables de acciones tomadas por Riot
+        Games sobre las cuentas alquiladas, incluyendo suspensiones o baneos. Nuestra
+        responsabilidad máxima se limita al monto pagado por el usuario en los últimos 30 días.
+      </p>
+
+      <h2>10. Terminación</h2>
+      <p>
+        Podemos suspender o terminar tu acceso al Servicio si violas estos Términos. En caso de
+        terminación por violación, no se otorgarán reembolsos por el período restante pagado.
+      </p>
+
+      <h2>11. Modificaciones</h2>
+      <p>
+        Nos reservamos el derecho de modificar estos Términos. Los cambios serán notificados a
+        través de la aplicación o por correo electrónico. El uso continuado del Servicio después de
+        los cambios constituye aceptación de los nuevos Términos.
+      </p>
+
+      <h2>12. Contacto</h2>
+      <p>
+        Para cualquier consulta sobre estos Términos, puedes contactarnos a través de la aplicación
+        o por correo electrónico.
+      </p>
     </div>
-  </nav>
 
-  <div class="content">
-    <h1>Términos de Servicio</h1>
-    <p class="updated">Última actualización: 8 de febrero de 2026</p>
-
-    <h2>1. Aceptación de los Términos</h2>
-    <p>Al descargar, instalar o utilizar la aplicación AccountFlow ("el Servicio"), aceptas estar sujeto a estos Términos de Servicio. Si no estás de acuerdo, no utilices el Servicio.</p>
-
-    <h2>2. Descripción del Servicio</h2>
-    <p>AccountFlow es una aplicación de escritorio que permite a los usuarios alquilar temporalmente cuentas de League of Legends mediante un sistema de créditos. El Servicio incluye:</p>
-    <ul>
-      <li>Planes de suscripción mensual con créditos incluidos</li>
-      <li>Compra de paquetes de créditos adicionales</li>
-      <li>Acceso temporal a cuentas del pool disponible</li>
-    </ul>
-
-    <h2>3. Cuentas de Usuario</h2>
-    <p>Debes crear una cuenta para usar el Servicio. Eres responsable de mantener la confidencialidad de tu contraseña y de todas las actividades realizadas bajo tu cuenta. Debes tener al menos 13 años de edad para usar el Servicio.</p>
-
-    <h2>4. Suscripciones y Pagos</h2>
-    <p>Los pagos son procesados por Paddle.com Market Ltd ("Paddle"), quien actúa como Merchant of Record. Al suscribirte a un plan de pago, autorizas a Paddle a cobrar la tarifa mensual correspondiente de forma recurrente hasta que canceles.</p>
-    <ul>
-      <li>Los precios están en dólares estadounidenses (USD)</li>
-      <li>Las suscripciones se renuevan automáticamente cada 30 días</li>
-      <li>Puedes cancelar tu suscripción en cualquier momento desde la aplicación</li>
-    </ul>
-
-    <h2>5. Créditos</h2>
-    <p>Los créditos de suscripción se otorgan al iniciar o renovar un plan y expiran al final del período de facturación. Los créditos comprados por separado no expiran mientras tu cuenta esté activa. Los créditos no son transferibles ni reembolsables una vez utilizados.</p>
-
-    <h2>6. Uso Aceptable</h2>
-    <p>Al usar el Servicio, aceptas:</p>
-    <ul>
-      <li>No compartir las credenciales de las cuentas alquiladas con terceros</li>
-      <li>No intentar cambiar la contraseña o configuración de seguridad de las cuentas alquiladas</li>
-      <li>No usar las cuentas alquiladas para actividades que violen los términos de servicio de Riot Games</li>
-      <li>Devolver (liberar) las cuentas alquiladas al finalizar el período de alquiler</li>
-      <li>No intentar hacer ingeniería inversa o explotar vulnerabilidades del Servicio</li>
-    </ul>
-
-    <h2>7. Disponibilidad del Servicio</h2>
-    <p>Nos esforzamos por mantener el Servicio disponible, pero no garantizamos disponibilidad ininterrumpida. Podemos modificar, suspender o discontinuar cualquier aspecto del Servicio con notificación previa razonable.</p>
-
-    <h2>8. Propiedad Intelectual</h2>
-    <p>AccountFlow y su contenido son propiedad de sus desarrolladores. League of Legends es marca registrada de Riot Games, Inc. AccountFlow no está afiliado, asociado ni respaldado por Riot Games.</p>
-
-    <h2>9. Limitación de Responsabilidad</h2>
-    <p>El Servicio se proporciona "tal cual". No somos responsables de acciones tomadas por Riot Games sobre las cuentas alquiladas, incluyendo suspensiones o baneos. Nuestra responsabilidad máxima se limita al monto pagado por el usuario en los últimos 30 días.</p>
-
-    <h2>10. Terminación</h2>
-    <p>Podemos suspender o terminar tu acceso al Servicio si violas estos Términos. En caso de terminación por violación, no se otorgarán reembolsos por el período restante pagado.</p>
-
-    <h2>11. Modificaciones</h2>
-    <p>Nos reservamos el derecho de modificar estos Términos. Los cambios serán notificados a través de la aplicación o por correo electrónico. El uso continuado del Servicio después de los cambios constituye aceptación de los nuevos Términos.</p>
-
-    <h2>12. Contacto</h2>
-    <p>Para cualquier consulta sobre estos Términos, puedes contactarnos a través de la aplicación o por correo electrónico.</p>
-  </div>
-
-  <footer>© 2026 AccountFlow. Todos los derechos reservados.</footer>
-</body>
+    <footer>© 2026 AccountFlow. Todos los derechos reservados.</footer>
+  </body>
 </html>
