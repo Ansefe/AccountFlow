@@ -27,13 +27,15 @@
 | Dato | Valor |
 |------|-------|
 | **Stack** | Electron 39 + Vue 3 + TypeScript + TailwindCSS 4 + Pinia 3 + Supabase |
-| **Build** | Limpio, 0 errores, ~1789 módulos |
-| **Fase actual** | Fase 1 completa + Stripe integrado + correcciones post-MVP |
+| **Build** | Limpio, 0 errores, ~1789 módulos. Instalador .exe generado |
+| **Fase actual** | Fase 1 completa + Lemon Squeezy integrado + infraestructura desplegada |
 | **Páginas** | 11 (Login, Register, Dashboard, Accounts, MyRentals, Credits, Settings, Admin ×4) |
 | **Stores** | 4 (auth, accounts, rentals, admin) |
 | **Rutas** | 11 con guards de auth y admin |
-| **Migraciones SQL** | 3 (001_initial_schema + 002_early_bird_pgcron + 003_stripe_integration) |
-| **Edge Functions** | 5 (create-checkout, stripe-webhook, customer-portal, renew-subscriptions, payment-result) |
+| **Migraciones SQL** | 3 (001_initial_schema + 002_early_bird_pgcron + 003_lemonsqueezy_integration) |
+| **Edge Functions** | 5 (create-checkout, ls-webhook, customer-portal, renew-subscriptions, payment-result) |
+| **Procesador de pagos** | Lemon Squeezy (MoR — Merchant of Record) |
+| **Landing page** | GitHub Pages: `ansefe.github.io/AccountFlow` (rebranded como gaming analytics) |
 
 ---
 
@@ -49,6 +51,10 @@
 - [x] Cliente Supabase configurado con `persistSession`, `autoRefreshToken`, `fetchWithTimeout`
 - [x] CSP configurado para Supabase, Discord, Google Fonts
 - [x] Fuentes Inter + JetBrains Mono vía Google Fonts CSS link
+- [x] Proyecto Supabase creado y configurado (Free tier)
+- [x] Las 3 migraciones SQL ejecutadas en Supabase
+- [x] Auth email/password habilitado en Supabase
+- [x] Build .exe de Windows generado con electron-builder
 
 #### Autenticación
 - [x] Login con email/password
@@ -75,31 +81,45 @@
 #### Sistema de Planes (actualizado)
 - [x] 4 tipos de plan: `none`, `early_bird`, `basic`, `unlimited`
 - [x] Cambio de plan vía función RPC `change_user_plan()` (SECURITY DEFINER)
-- [x] Recarga mensual automática vía `pg_cron` (función `renew_expired_subscriptions()`)
+- [x] Recarga mensual automática vía Edge Function + GitHub Actions cron (00:05 UTC)
 - [x] Unlimited: sin créditos, alquiler ilimitado (1 cuenta a la vez), sin compra de créditos
 - [x] Early Bird: $6/mes, 1000 créditos, badge "40% OFF · Tiempo limitado"
 - [x] Plan cards en SettingsPage con feedback visual
 
-#### Pagos y Stripe
-- [x] Integración Stripe Checkout para suscripciones (early_bird, basic, unlimited)
-- [x] Integración Stripe Checkout para compra de créditos (paquetes)
-- [x] Edge Function `create-checkout` (crea sesiones de Stripe Checkout)
-- [x] Edge Function `stripe-webhook` (procesa eventos: checkout.session.completed, invoice.paid, customer.subscription.deleted, invoice.payment_failed)
-- [x] Edge Function `customer-portal` (URL del portal de facturación Stripe)
-- [x] Edge Function `payment-result` (página HTML de resultado post-pago)
+#### Pagos — Lemon Squeezy (Merchant of Record)
+- [x] Integración Lemon Squeezy Checkout para suscripciones (early_bird, basic, unlimited)
+- [x] Integración Lemon Squeezy Checkout para compra de créditos (paquetes)
+- [x] Edge Function `create-checkout` (crea checkouts via LS API — JSON:API format)
+- [x] Edge Function `ls-webhook` (procesa eventos: subscription_created, subscription_updated, subscription_cancelled, subscription_payment_success, order_created)
+- [x] Edge Function `customer-portal` (URL pre-firmada del portal de cliente LS, válida 24h)
+- [x] Edge Function `payment-result` (página HTML de resultado post-pago, en inglés)
 - [x] Edge Function `renew-subscriptions` (alternativa a pg_cron para Free tier)
 - [x] GitHub Actions workflow `renew-subscriptions.yml` (cron diario 00:05 UTC)
 - [x] SQL migration 003: funciones server-side (activate_subscription, handle_subscription_renewal, cancel_subscription, add_purchased_credits)
-- [x] IPC `shell:openExternal` para abrir URLs de Stripe en el navegador
-- [x] Stripe Customer Portal para gestionar/cancelar suscripción
+- [x] IPC `shell:openExternal` para abrir URLs de LS en el navegador
+- [x] LS Customer Portal para gestionar/cancelar suscripción
 - [x] Polling de perfil cada 5s en SettingsPage y CreditsPage (detectar cambios post-pago)
 - [x] Validación: requiere plan activo para comprar créditos
 - [x] Validación: Unlimited no puede comprar créditos
-- [x] Columnas `stripe_subscription_id` en profiles, `stripe_price_id` en credit_packages
+- [x] Columnas `ls_customer_id`, `ls_subscription_id` en profiles, `ls_variant_id` en credit_packages
+- [x] Webhook HMAC SHA-256 signature verification via `X-Signature` header
+- [x] Webhook configurado en LS Dashboard
+- [x] Productos y variantes creados en LS (3 suscripciones)
+- [x] Secrets configurados en Supabase Edge Functions
+- [x] Secrets configurados en GitHub Actions (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+- [x] 5 Edge Functions desplegadas en Supabase
+- [x] Suscripción de prueba exitosa (checkout → webhook → plan activado → email de confirmación)
+
+#### Landing Page y Documentos Legales
+- [x] Landing page en GitHub Pages (`ansefe.github.io/AccountFlow`)
+- [x] Página de términos de servicio (`/terms.html`)
+- [x] Página de política de privacidad (`/privacy.html`)
+- [x] Página de política de reembolsos (`/refund.html`)
+- [x] Rebranded como "Competitive Gaming Performance Analytics" (para aprobación de procesador de pagos)
 
 #### Reglas de Negocio Corregidas
 - [x] Orden de créditos: subscription se gasta primero, luego purchased
-- [x] Unlimited: sin créditos, alquiler directo ilimitado ($30/mes pago con Stripe)
+- [x] Unlimited: sin créditos, alquiler directo ilimitado ($30/mes pago con LS)
 - [x] Requiere plan activo para comprar créditos extra
 
 #### Base de Datos
@@ -109,6 +129,7 @@
 - [x] Triggers para `updated_at` y `handle_new_user`
 - [x] Seed data para credit_packages y app_settings
 - [x] Migración 002: pg_cron + early_bird + change_user_plan RPC
+- [x] Migración 003: Lemon Squeezy columns + 4 SECURITY DEFINER functions
 
 #### UI/UX
 - [x] Sidebar con navegación, plan badge (incluye Unlimited ∞), dropdown de usuario
@@ -119,14 +140,9 @@
 - [x] Layout glassmorphism en login/register
 
 ### ⚠️ Parcialmente Implementado
-- [ ] Discord OAuth — Código listo, pero requiere configuración manual en Discord Developer Portal + Supabase
-- [ ] Stripe — Código completo (Edge Functions + frontend), requiere configuración manual:
-  - Crear productos/precios en Stripe Dashboard
-  - Configurar webhook endpoint
-  - Setear secrets en Supabase (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_*)
-  - Actualizar `stripe_price_id` en credit_packages
+- [ ] Discord OAuth — Código listo, pero requiere configuración manual en Discord Developer Portal + Supabase (dejado para el final)
 - [ ] Riot Client path — Campo existe en Settings, pero no se guarda ni se utiliza aún
-- [ ] pg_cron alternativa — Edge Function + GitHub Actions listos, requieren setear secrets en GitHub repo
+- [ ] Compra de créditos en LS — Error CORS al hacer checkout (posiblemente producto no publicado o variant_id faltante en tabla `credit_packages`). Las suscripciones sí funcionan.
 
 ### ❌ No Implementado Aún
 - [ ] Auto-login LoL (nut.js)
@@ -134,6 +150,8 @@
 - [ ] Riot API sync
 - [ ] Auto-updates (electron-updater)
 - [ ] Notificaciones in-app
+- [ ] Restricción de RLS en profiles (seguridad crítica)
+- [ ] Encriptación de passwords de cuentas LoL (AES-256-GCM)
 
 ---
 
@@ -144,7 +162,11 @@ accountflow/
 ├── docs/
 │   ├── plan.md                          # Plan original del proyecto
 │   ├── ui-spec.md                       # Especificación UI/UX
-│   └── progress.md                      # Este documento
+│   ├── progress.md                      # Este documento
+│   ├── index.html                       # Landing page (GitHub Pages)
+│   ├── terms.html                       # Términos de servicio
+│   ├── privacy.html                     # Política de privacidad
+│   └── refund.html                      # Política de reembolsos
 │
 ├── .github/
 │   └── workflows/
@@ -154,12 +176,12 @@ accountflow/
 │   ├── migrations/
 │   │   ├── 001_initial_schema.sql       # Schema completo (8 tablas, RLS, triggers, seed)
 │   │   ├── 002_early_bird_pgcron.sql    # early_bird enum, pg_cron, change_user_plan RPC
-│   │   └── 003_stripe_integration.sql   # Stripe columns, server-side functions
+│   │   └── 003_lemonsqueezy_integration.sql  # LS columns, server-side SECURITY DEFINER functions
 │   └── functions/
-│       ├── create-checkout/index.ts     # Crea sesiones de Stripe Checkout
-│       ├── stripe-webhook/index.ts      # Procesa webhooks de Stripe
-│       ├── customer-portal/index.ts     # URL del portal de facturación
-│       ├── renew-subscriptions/index.ts # Renueva suscripciones expiradas
+│       ├── create-checkout/index.ts     # Crea checkouts via Lemon Squeezy API (JSON:API)
+│       ├── ls-webhook/index.ts          # Procesa webhooks de Lemon Squeezy (HMAC SHA-256)
+│       ├── customer-portal/index.ts     # URL pre-firmada del portal de cliente LS
+│       ├── renew-subscriptions/index.ts # Renueva suscripciones expiradas (admin-granted)
 │       └── payment-result/index.ts      # Página HTML post-pago
 │
 ├── src/
@@ -173,9 +195,9 @@ accountflow/
 │           ├── assets/main.css          # Tailwind + theme CSS variables
 │           ├── lib/
 │           │   ├── supabase.ts          # Cliente Supabase con fetchWithTimeout
-│           │   ├── stripe.ts            # Helpers: checkoutSubscription, checkoutCreditPackage, openCustomerPortal
+│           │   ├── lemonsqueezy.ts      # Helpers: checkoutSubscription, checkoutCreditPackage, openCustomerPortal
 │           │   └── utils.ts             # cn() helper
-│           ├── types/database.ts        # Tipos TS del schema (actualizado con stripe fields)
+│           ├── types/database.ts        # Tipos TS del schema (con campos LS)
 │           ├── router/index.ts          # 11 rutas + guards
 │           ├── stores/
 │           │   ├── auth.store.ts        # Sesión, perfil, isUnlimited
@@ -293,27 +315,29 @@ En el frontend, filtrar `planOptions` por `visible: true` consultando `app_setti
 - Cron schedule: diario a las 00:05 UTC
 - Función `change_user_plan()` (SECURITY DEFINER, RPC)
 
-### Migración 003: `003_stripe_integration.sql`
-- `stripe_subscription_id` column en profiles
-- `stripe_price_id` column en credit_packages
-- Actualización de `app_settings.plans` con campos `stripe_price_id`
-- Function `activate_subscription()` (SECURITY DEFINER) — activa plan tras checkout
-- Function `handle_subscription_renewal()` (SECURITY DEFINER) — renueva créditos mensual
+### Migración 003: `003_lemonsqueezy_integration.sql`
+- `ls_customer_id`, `ls_subscription_id` columns en profiles
+- `ls_variant_id` column en credit_packages
+- Actualización de `app_settings.plans` con campos `ls_variant_id`
+- Function `activate_subscription()` (SECURITY DEFINER) — activa plan tras checkout de LS
+- Function `handle_subscription_renewal()` (SECURITY DEFINER) — renueva créditos mensual (webhook)
 - Function `cancel_subscription()` (SECURITY DEFINER) — cancela plan
-- Function `add_purchased_credits()` (SECURITY DEFINER) — agrega créditos tras compra
+- Function `add_purchased_credits()` (SECURITY DEFINER) — agrega créditos tras compra one-time
 
 ### Estado de ejecución
 | Migración | Estado |
 |-----------|--------|
-| 001_initial_schema.sql | ⚠️ Pendiente de ejecutar por el usuario en Supabase SQL Editor |
-| 002_early_bird_pgcron.sql | ⚠️ Pendiente — **comentar las líneas de pg_cron** (CREATE EXTENSION y cron.schedule) si estás en Free tier |
-| 003_stripe_integration.sql | ⚠️ Pendiente de ejecutar por el usuario en Supabase SQL Editor |
+| 001_initial_schema.sql | ✅ Ejecutada |
+| 002_early_bird_pgcron.sql | ✅ Ejecutada (pg_cron puede estar activo pero no se usa — ver nota) |
+| 003_lemonsqueezy_integration.sql | ✅ Ejecutada |
+
+> **Nota**: Si se creó un cron job de pg_cron en Supabase, se puede eliminar de forma segura. La renovación se maneja vía GitHub Actions + Edge Function `renew-subscriptions`. Para borrarlo: Supabase Dashboard → Database → Extensions → buscar "pg_cron" → Cron Jobs, o ejecutar `SELECT cron.unschedule('renew-expired-subscriptions');`.
 
 ---
 
 ## 6. Consideraciones Técnicas Importantes
 
-### 6.1 pg_cron requiere Supabase Pro ($25/mes)
+### 6.1 pg_cron no se utiliza — GitHub Actions como alternativa
 
 **Decisión: Supabase Free tier.** Se implementó alternativa:
 
@@ -321,14 +345,13 @@ En el frontend, filtrar `planOptions` por `visible: true` consultando `app_setti
 |-----------|--------|
 | **Edge Function `renew-subscriptions`** | Ejecuta `renew_expired_subscriptions()` vía service_role |
 | **GitHub Actions workflow** | Cron diario a las 00:05 UTC que invoca la Edge Function |
-| **Stripe webhooks** | Para usuarios con Stripe, la renovación se maneja vía `invoice.paid` webhook |
+| **LS webhooks** | Para usuarios con Lemon Squeezy, la renovación se maneja vía `subscription_payment_success` webhook |
 
-La función `renew_expired_subscriptions()` de migration 002 sigue siendo necesaria para planes asignados manualmente por el admin (sin Stripe). Para usuarios Stripe, el webhook `invoice.paid` maneja la renovación directamente.
+La función `renew_expired_subscriptions()` de migration 002 sigue siendo necesaria para planes asignados manualmente por el admin (sin LS). Para usuarios LS, el webhook `subscription_payment_success` maneja la renovación directamente.
 
-**Setup requerido:**
-1. Deploy Edge Functions: `supabase functions deploy renew-subscriptions --no-verify-jwt`
-2. Setear secret: `supabase secrets set CRON_SECRET=tu-secret-random`
-3. GitHub repo secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+**Estado**: ✅ Desplegado y configurado. GitHub Actions secrets seteados.
+
+> Si existe un cron job de pg_cron creado en Supabase, se puede borrar de forma segura ya que no se utiliza.
 
 ### 6.2 Seguridad del cambio de plan
 
@@ -369,30 +392,45 @@ El código está implementado pero requiere configuración manual:
 
 **Error conocido**: Si se configura mal el Client ID, Supabase devuelve "El valor X no es snowflake" — significa que el Client ID no es numérico.
 
-### 6.4 Stripe Integration Architecture
+### 6.4 Lemon Squeezy Integration Architecture
+
+**Procesador de pagos**: Lemon Squeezy actúa como Merchant of Record (MoR), gestionando impuestos, facturación y cumplimiento. Soporta merchants desde Colombia con usuarios globales.
+
+**API**: `https://api.lemonsqueezy.com/v1` — formato JSON:API.
 
 **Flujo de suscripción:**
 1. Usuario clic en plan card (SettingsPage) → llama Edge Function `create-checkout`
-2. Edge Function crea Stripe Checkout Session → devuelve URL
+2. Edge Function crea Checkout via LS API (POST `/v1/checkouts`) → devuelve URL
 3. App abre URL en navegador externo vía `shell.openExternal`
-4. Usuario completa pago en Stripe
-5. Stripe envía webhook `checkout.session.completed` → Edge Function `stripe-webhook`
-6. Webhook llama `activate_subscription()` → actualiza perfil (plan, créditos, stripe_subscription_id)
-7. App detecta cambio via polling cada 5s
+4. Usuario completa pago en LS Checkout
+5. LS envía webhook `subscription_created` → Edge Function `ls-webhook`
+6. Webhook llama `activate_subscription()` → actualiza perfil (plan, créditos, ls_subscription_id, ls_customer_id)
+7. App detecta cambio vía polling cada 5s
 
 **Flujo de compra de créditos:**
 1. Usuario clic "Comprar" en paquete (CreditsPage) → `create-checkout` con `type: credit_package`
-2. Pago one-time en Stripe
-3. Webhook llama `add_purchased_credits()` → suma créditos al perfil
+2. Pago one-time en LS
+3. Webhook `order_created` → llama `add_purchased_credits()` → suma créditos al perfil
 
 **Renovación mensual:**
-- Stripe cobra automáticamente → webhook `invoice.paid` → `handle_subscription_renewal()` → reset subscription_credits
+- LS cobra automáticamente → webhook `subscription_payment_success` (billing_reason=renewal) → `handle_subscription_renewal()` → reset subscription_credits
 
 **Cancelación:**
-- Via Customer Portal (Stripe) o directo en la app → webhook `customer.subscription.deleted` → `cancel_subscription()`
+- Via Customer Portal (LS) → webhook `subscription_cancelled` → `cancel_subscription()`
 
 **Gestión:**
-- Botón "Gestionar suscripción" abre Stripe Customer Portal (cambiar método de pago, cancelar, etc.)
+- Botón "Gestionar suscripción" abre LS Customer Portal (URL pre-firmada, válida 24h)
+
+**Verificación de webhooks:**
+- Header `X-Signature` con HMAC SHA-256 hex digest del body
+- Verificación con `timingSafeEqual` para prevenir timing attacks
+
+**Variables de entorno (Edge Functions):**
+- `LEMONSQUEEZY_API_KEY` — API key de LS
+- `LEMONSQUEEZY_STORE_ID` — Store ID numérico
+- `LEMONSQUEEZY_WEBHOOK_SECRET` — Signing secret del webhook
+- `LS_VARIANT_EARLY_BIRD`, `LS_VARIANT_BASIC`, `LS_VARIANT_UNLIMITED` — Variant IDs de suscripciones
+- `CRON_SECRET` — Secret para autenticar GitHub Actions
 
 ### 6.5 Electron en producción
 
@@ -426,22 +464,32 @@ Las credenciales de las cuentas de LoL (`encrypted_password` en tabla `accounts`
 
 | 8 | Orden de créditos corregido | Subscription first (era purchased first) | Feb 2026 |
 | 9 | Plan requerido para comprar créditos | Validación en CreditsPage + Edge Function | Feb 2026 |
+| 10 | Stripe no soporta Colombia para merchants | Migración a Paddle, luego a Lemon Squeezy | Feb 2026 |
+| 11 | Paddle rechazó dominio GitHub Pages | Migración a Lemon Squeezy como procesador final | Feb 2026 |
+| 12 | payment-result caracteres corruptos (UTF-8) | HTML entities + texto en inglés | Feb 2026 |
+| 13 | ls-webhook module not found (deno.land/std) | Cambio a `node:crypto` y `node:buffer` imports | Feb 2026 |
+| 14 | redirect_url sin status param | Incluir `?status=success` en redirect_url del checkout | Feb 2026 |
+| 15 | Build .exe falla por symlinks (7-zip) | Habilitar Developer Mode en Windows | Feb 2026 |
 
 ---
 
 El MVP es la versión mínima funcional que se puede distribuir a los primeros usuarios (amigos). Incluye todo lo necesario para que paguen, alquilen cuentas y las usen.
 
-### 8.1 Bloque A — Pagos (Crítico)
+### 8.1 Bloque A — Pagos (✅ Completado)
 
-| Tarea | Prioridad | Estimado | Detalle |
-|-------|-----------|----------|---------|
-| Integración Stripe Checkout | 🔴 Alta | 3-4 días | Suscripciones (early_bird, basic, unlimited) + compra de créditos |
-| Stripe Webhooks vía Edge Function | 🔴 Alta | 1-2 días | `stripe-webhook` Edge Function: procesar `checkout.session.completed`, `invoice.paid`, `customer.subscription.deleted` |
-| Vincular pago con cambio de plan | 🔴 Alta | 1 día | Actualmente el cambio de plan es "gratis" (sin validar pago). Con Stripe: primero se paga, el webhook actualiza el plan |
-| Portal de facturación Stripe | 🟡 Media | 0.5 días | Para que el usuario cancele/actualice suscripción desde Stripe |
-| Cripto manual (admin) | 🟢 Baja | Ya existe | El admin ya puede ajustar créditos manualmente desde el panel |
+| Tarea | Estado | Detalle |
+|-------|--------|---------|
+| Integración procesador de pagos | ✅ | Lemon Squeezy (Stripe → Paddle → LS por restricciones de Colombia) |
+| Webhooks vía Edge Function | ✅ | `ls-webhook` — procesa subscription_created, updated, cancelled, payment_success, order_created |
+| Vincular pago con cambio de plan | ✅ | Checkout → webhook → activate_subscription() |
+| Portal de gestión | ✅ | Customer Portal de Lemon Squeezy (URL pre-firmada) |
+| Cripto manual (admin) | ✅ | El admin puede ajustar créditos manualmente desde el panel |
+| Landing page + docs legales | ✅ | GitHub Pages para aprobación del procesador de pagos |
+| Deploy Edge Functions | ✅ | 5 funciones desplegadas en Supabase |
+| Secrets configurados | ✅ | Supabase Edge Functions + GitHub Actions |
+| Suscripción probada | ✅ | Checkout → pago → webhook → plan activado → email confirmación |
 
-### 8.2 Bloque B — Auto-Login LoL (Crítico)
+### 8.2 Bloque B — Auto-Login LoL (Crítico — SIGUIENTE PASO)
 
 | Tarea | Prioridad | Estimado | Detalle |
 |-------|-----------|----------|---------|
@@ -451,7 +499,7 @@ El MVP es la versión mínima funcional que se puede distribuir a los primeros u
 | Desencriptación de credenciales | 🔴 Alta | 1 día | AES-256 decrypt en Main Process, limpieza de memoria |
 | Botón "Iniciar Sesión" en UI | 🟡 Media | 0.5 días | En MyRentalsPage, para el rental activo |
 
-### 8.3 Bloque C — Seguridad (Crítico)
+### 8.3 Bloque C — Seguridad (Crítico — SIGUIENTE PASO)
 
 | Tarea | Prioridad | Estimado | Detalle |
 |-------|-----------|----------|---------|
@@ -466,18 +514,17 @@ El MVP es la versión mínima funcional que se puede distribuir a los primeros u
 | Heartbeat system | 🟡 Media | 1-2 días | Ping cada 60s a Supabase, liberar cuenta si 3min sin heartbeat |
 | Expiración de rentals (client-side) | 🟡 Media | 0.5 días | Timer que auto-libera cuando `expires_at` pasa (ya parcialmente implementado) |
 | Global toast notifications | 🟡 Media | 0.5 días | Feedback visual para success/error en todas las acciones |
-| Edge Function o alternativa para pg_cron | 🟡 Media | 1 día | Si no se usa Supabase Pro |
 | Cargar plan visibility desde app_settings | 🟢 Baja | 0.5 días | Para poder ocultar early_bird sin deploy |
 
 ### 8.5 Bloque E — Distribución
 
 | Tarea | Prioridad | Estimado | Detalle |
 |-------|-----------|----------|---------|
-| Build de producción Windows (.exe) | 🔴 Alta | 0.5 días | `electron-builder --win` |
+| Build de producción Windows (.exe) | ✅ Listo | — | `npm run build:win` genera instalador NSIS |
 | Auto-updates (electron-updater) | 🟡 Media | 1 día | GitHub Releases como host |
 | Smoke test completo | 🔴 Alta | 1 día | Registro → login → comprar plan → alquilar → auto-login → liberar |
 
-### Estimación total MVP: ~15-20 días de trabajo
+### Estimación restante MVP: ~8-12 días de trabajo (Bloques B + C + D + E parcial)
 
 ---
 
@@ -520,56 +567,42 @@ Más allá del MVP, estas son las fases posteriores:
 
 ## 10. Acciones Pendientes del Usuario
 
-Estas acciones requieren intervención manual y no pueden ser automatizadas por Cascade:
+### Completadas
 
-### Inmediatas (antes de poder probar)
+| # | Acción | Estado |
+|---|--------|--------|
+| 1 | Crear proyecto Supabase | ✅ |
+| 2 | Ejecutar migración 001 | ✅ |
+| 3 | Ejecutar migración 002 | ✅ |
+| 4 | Ejecutar migración 003 (Lemon Squeezy) | ✅ |
+| 5 | Crear `.env` con SUPABASE_URL y ANON_KEY | ✅ |
+| 6 | Habilitar Auth email/password | ✅ |
+| 7 | Crear cuenta en Lemon Squeezy | ✅ |
+| 8 | Crear productos/variantes en LS (3 suscripciones) | ✅ |
+| 9 | Configurar webhook en LS | ✅ |
+| 10 | Deploy 5 Edge Functions | ✅ |
+| 11 | Setear secrets en Supabase Edge Functions | ✅ |
+| 12 | Setear secrets en GitHub Actions | ✅ |
+| 13 | Generar build .exe de Windows | ✅ |
+| 14 | Probar suscripción (checkout → pago → plan activado) | ✅ |
+
+### Pendientes
 
 | # | Acción | Detalle |
 |---|--------|---------|
-| 1 | **Crear proyecto Supabase** | [supabase.com](https://supabase.com) → New Project |
-| 2 | **Ejecutar migración 001** | SQL Editor → pegar contenido de `supabase/migrations/001_initial_schema.sql` → Run |
-| 3 | **Ejecutar migración 002** | SQL Editor → pegar `002_early_bird_pgcron.sql`. **IMPORTANTE**: Comentar `CREATE EXTENSION IF NOT EXISTS pg_cron;` y las líneas de `cron.schedule` (estás en Free tier). Las funciones `renew_expired_subscriptions()` y `change_user_plan()` SÍ se crean. |
-| 4 | **Ejecutar migración 003** | SQL Editor → pegar `003_stripe_integration.sql` → Run |
-| 5 | **Crear `.env`** | Copiar `.env.example` → renombrar a `.env` → llenar `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` |
-| 6 | **Probar login** | `npm run dev` → registrar usuario → verificar que se crea el perfil |
-| 7 | **Promover a admin** | `UPDATE profiles SET role = 'admin' WHERE id = 'TU-USER-ID';` |
+| 15 | **Probar compra de créditos** | Verificar que los productos one-time en LS estén publicados y que `credit_packages.ls_variant_id` esté seteado en la DB |
+| 16 | **Promover usuario a admin** | `UPDATE profiles SET role = 'admin' WHERE id = 'TU-USER-ID';` |
+| 17 | **Cargar cuentas LoL en la DB** | Via panel admin o SQL directo |
+| 18 | **(Opcional) Borrar cron de pg_cron** | `SELECT cron.unschedule('renew-expired-subscriptions');` o desde Supabase Dashboard |
 
-### Para Stripe
-
-| # | Acción | Detalle |
-|---|--------|--------|
-| 8 | **Crear cuenta Stripe** | [stripe.com](https://stripe.com) |
-| 9 | **Crear productos en Stripe** | 3 suscripciones: Early Bird ($6/mes), Basic ($10/mes), Unlimited ($30/mes). 3 paquetes one-time: Starter ($5), Popular ($10), Pro ($22) |
-| 10 | **Copiar Price IDs** | Cada producto tiene un `price_id` (ej: `price_1Abc...`) |
-| 11 | **Deploy Edge Functions** | `supabase functions deploy create-checkout`, `stripe-webhook --no-verify-jwt`, `customer-portal`, `renew-subscriptions --no-verify-jwt`, `payment-result --no-verify-jwt` |
-| 12 | **Setear secrets en Supabase** | `supabase secrets set STRIPE_SECRET_KEY=sk_test_xxx STRIPE_WEBHOOK_SECRET=whsec_xxx STRIPE_PRICE_EARLY_BIRD=price_xxx STRIPE_PRICE_BASIC=price_xxx STRIPE_PRICE_UNLIMITED=price_xxx CRON_SECRET=tu-secret` |
-| 13 | **Configurar webhook en Stripe** | Endpoint: `https://TU_PROJECT.supabase.co/functions/v1/stripe-webhook`. Eventos: `checkout.session.completed`, `invoice.paid`, `customer.subscription.deleted`, `invoice.payment_failed` |
-| 14 | **Actualizar credit_packages** | `UPDATE credit_packages SET stripe_price_id = 'price_xxx' WHERE name = 'Starter';` (repetir para cada paquete) |
-| 15 | **Configurar Customer Portal** | Stripe Dashboard → Settings → Customer Portal → Habilitar cancelación y cambio de plan |
-
-### Para GitHub Actions (cron de renovación)
-
-| # | Acción | Detalle |
-|---|--------|--------|
-| 16 | **Push repo a GitHub** | El workflow `.github/workflows/renew-subscriptions.yml` ya está creado |
-| 17 | **Setear secrets en GitHub** | Settings → Secrets → `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` |
-
-### Para Discord OAuth
+### Para Discord OAuth (dejado para el final)
 
 | # | Acción | Detalle |
 |---|--------|---------|
-| 18 | Crear aplicación en Discord Developer Portal | [discord.com/developers](https://discord.com/developers/applications) |
-| 19 | Copiar Application ID (numérico) y Client Secret | |
-| 20 | Agregar redirect URL | `https://TU_PROJECT_REF.supabase.co/auth/v1/callback` |
-| 21 | Configurar en Supabase | Auth → Providers → Discord → Client ID + Secret |
-
-### Decisión requerida
-
-| # | Decisión | Estado |
-|---|----------|--------|
-| ~14~ | ~¿Supabase Free o Pro?~ | ✅ **Free** — alternativa a pg_cron implementada |
-| ~15~ | ~¿Cuántos créditos Unlimited?~ | ✅ **Cero** — $30/mes = alquiler ilimitado sin créditos |
-| 16 | **¿Credenciales LoL ya están en la DB?** | Pendiente — para planificar encriptación AES-256 |
+| 19 | Crear aplicación en Discord Developer Portal | [discord.com/developers](https://discord.com/developers/applications) |
+| 20 | Copiar Application ID (numérico) y Client Secret | |
+| 21 | Agregar redirect URL | `https://sisitxrcjovkvfeqlkwx.supabase.co/auth/v1/callback` |
+| 22 | Configurar en Supabase | Auth → Providers → Discord → Client ID + Secret |
 
 ---
 
@@ -579,7 +612,7 @@ Estas acciones requieren intervención manual y no pueden ser automatizadas por 
 
 | Riesgo | Impacto | Mitigación |
 |--------|---------|------------|
-| **Sin pasarela de pago** | ✅ Resuelto | Stripe integrado (código completo, pendiente configuración) |
+| **Sin pasarela de pago** | ✅ Resuelto | Lemon Squeezy integrado y funcionando (suscripciones probadas) |
 | **RLS de profiles muy permisivo** | Un usuario técnico podría darse créditos infinitos via SDK | Restringir RLS a solo `display_name`, forzar todo lo demás vía SECURITY DEFINER |
 | **Credenciales LoL sin encriptar** | Si la DB se compromete, se exponen todas las cuentas | Implementar AES-256-GCM antes de cargar datos reales |
 | **Sin heartbeat** | Un usuario puede cerrar el app y mantener la cuenta lockeada indefinidamente | Implementar heartbeat + auto-release |
@@ -588,9 +621,10 @@ Estas acciones requieren intervención manual y no pueden ser automatizadas por 
 
 | Riesgo | Impacto | Mitigación |
 |--------|---------|------------|
-| pg_cron no disponible en Free tier | ✅ Resuelto | Edge Function + GitHub Actions como alternativa implementada |
-| **Discord OAuth mal configurado** | Usuarios no pueden loguear con Discord | Documentación clara de configuración (sección 10) |
+| pg_cron no disponible en Free tier | ✅ Resuelto | Edge Function + GitHub Actions como alternativa implementada y desplegada |
+| **Discord OAuth mal configurado** | Usuarios no pueden loguear con Discord | Dejado para el final — documentación clara de configuración |
 | **Sin auto-updates** | Los usuarios tendrían que descargar manualmente cada actualización | electron-updater + GitHub Releases (Fase 2) |
+| **Compra de créditos con error CORS** | Usuarios no pueden comprar créditos extra | Probablemente producto no publicado en LS o ls_variant_id faltante en DB |
 
 ### Deuda Técnica
 
@@ -599,10 +633,12 @@ Estas acciones requieren intervención manual y no pueden ser automatizadas por 
 | Plan cards hardcodeadas | Baja | Deberían cargarse dinámicamente desde `app_settings.plans` |
 | Lint warnings en Sidebar | Cosmético | `pl-[9px]` → `pl-2.25`, `bg-gradient-to-br` → `bg-linear-to-br` (Tailwind v4) |
 | `@theme` warning en CSS | Cosmético | Linter no reconoce Tailwind v4, funciona correctamente |
-| Sin validación de pago en plan change | ✅ Resuelto | Plan change ahora pasa por Stripe Checkout. Admin puede cambiar planes vía RPC directamente. |
-| Orden de consumo de créditos | ✅ Resuelto | Subscription primero, purchased después. |
+| Sin validación de pago en plan change | ✅ Resuelto | Plan change ahora pasa por Lemon Squeezy Checkout |
+| Orden de consumo de créditos | ✅ Resuelto | Subscription primero, purchased después |
+| Documentos legales mencionan Paddle | Baja | Actualizar terms/privacy/refund para decir "Lemon Squeezy" |
 
 ---
 
 > **Documento generado para AccountFlow v1.0.0**
-> Próxima revisión sugerida: después de implementar Stripe y auto-login.
+> Última actualización: 8 de febrero de 2026
+> Próxima revisión sugerida: después de implementar auto-login LoL y seguridad (RLS + encriptación).

@@ -80,8 +80,8 @@ Deno.serve(async (req) => {
       .eq('id', user.id)
       .single()
 
-    // Build success URL
-    const resultUrl = `${supabaseUrl}/functions/v1/payment-result`
+    // Build success URL (include status param since LS doesn't add one)
+    const resultUrl = `${supabaseUrl}/functions/v1/payment-result?status=success`
 
     if (type === 'subscription') {
       const { plan_type: planType } = body as { plan_type: string; type: string }

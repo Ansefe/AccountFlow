@@ -9,8 +9,8 @@
 //   Signing secret: same as LEMONSQUEEZY_WEBHOOK_SECRET
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
-import { createHmac, timingSafeEqual } from 'https://deno.land/std@0.224.0/node/crypto.ts'
-import { Buffer } from 'https://deno.land/std@0.224.0/node/buffer.ts'
+import { createHmac, timingSafeEqual } from 'node:crypto'
+import { Buffer } from 'node:buffer'
 
 const WEBHOOK_SECRET = Deno.env.get('LEMONSQUEEZY_WEBHOOK_SECRET')!
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!

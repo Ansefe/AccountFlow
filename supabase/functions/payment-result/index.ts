@@ -1,5 +1,5 @@
 // Supabase Edge Function: payment-result
-// Simple HTML page shown after Paddle Checkout completes
+// Simple HTML page shown after Lemon Squeezy Checkout completes
 // Deploy: supabase functions deploy payment-result --no-verify-jwt
 
 Deno.serve(async (req) => {
@@ -11,30 +11,30 @@ Deno.serve(async (req) => {
   const isPortalReturn = status === 'portal-return'
 
   const title = isSuccess
-    ? '¡Pago Exitoso!'
+    ? 'Payment Successful!'
     : isCancelled
-      ? 'Pago Cancelado'
+      ? 'Payment Cancelled'
       : isPortalReturn
-        ? 'Portal Completado'
-        : 'Estado del Pago'
+        ? 'Portal Complete'
+        : 'Payment Status'
 
   const message = isSuccess
-    ? 'Tu pago fue procesado correctamente. Ya puedes cerrar esta pestaña y volver a AccountFlow.'
+    ? 'Your payment was processed successfully. You can close this tab and return to AccountFlow.'
     : isCancelled
-      ? 'El pago fue cancelado. Puedes cerrar esta pestaña y volver a AccountFlow para intentarlo de nuevo.'
+      ? 'The payment was cancelled. You can close this tab and return to AccountFlow to try again.'
       : isPortalReturn
-        ? 'Has terminado de gestionar tu suscripción. Puedes cerrar esta pestaña y volver a AccountFlow.'
-        : 'Puedes cerrar esta pestaña y volver a AccountFlow.'
+        ? 'You have finished managing your subscription. You can close this tab and return to AccountFlow.'
+        : 'You can close this tab and return to AccountFlow.'
 
   const color = isSuccess ? '#00E676' : isCancelled ? '#FF5252' : '#6C5CE7'
-  const icon = isSuccess ? '✓' : isCancelled ? '✕' : '●'
+  const icon = isSuccess ? '&#10003;' : isCancelled ? '&#10005;' : '&#9679;'
 
   const html = `<!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title} — AccountFlow</title>
+  <title>${title} - AccountFlow</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
