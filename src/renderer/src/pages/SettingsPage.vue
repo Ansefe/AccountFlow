@@ -87,10 +87,9 @@ async function saveProfile(): Promise<void> {
   saved.value = false
   errorMsg.value = ''
 
-  const { error } = await supabase
-    .from('profiles')
-    .update({ display_name: displayName.value.trim() })
-    .eq('id', auth.user.id)
+  const { error } = await supabase.rpc('update_own_display_name', {
+    p_display_name: displayName.value.trim()
+  })
 
   saving.value = false
 
