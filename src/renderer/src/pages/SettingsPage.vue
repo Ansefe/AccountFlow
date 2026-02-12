@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Loader2, Check, LogOut, Crown, Zap, Star, Sparkles, Timer, ExternalLink, CreditCard } from 'lucide-vue-next'
 import { useAuthStore } from '@renderer/stores/auth.store'
@@ -17,7 +17,22 @@ const errorMsg = ref('')
 const planMsg = ref('')
 const planError = ref('')
 const changingPlan = ref(false)
-const riotClientPath = ref('C:\\Riot Games\\Riot Client\\RiotClientServices.exe')
+const riotClientPath = ref(
+  localStorage.getItem('riotClientPath') || 'C:\\Riot Games\\Riot Client\\RiotClientServices.exe'
+)
+
+// Persist Riot Client path whenever it changes
+watch(riotClientPath, (v) => localStorage.setItem('riotClientPath', v))
+
+async function browseRiotClient(): Promise<void> {
+  const result = await window.api.dialog.openFile({
+    title: 'Seleccionar RiotClientServices.exe',
+    filters: [{ name: 'Ejecutable', extensions: ['exe'] }]
+  })
+  if (!result.canceled && result.filePaths[0]) {
+    riotClientPath.value = result.filePaths[0]
+  }
+}
 
 interface PlanOption {
   type: PlanType
@@ -312,11 +327,14 @@ async function handleLogout(): Promise<void> {
             type="text"
             class="flex-1 h-10 px-3 rounded-lg bg-bg-primary border border-border-default text-sm text-text-primary font-mono focus:outline-none focus:border-accent transition-colors"
           />
-          <button class="px-4 h-10 rounded-lg bg-surface border border-border-default text-xs font-medium text-text-secondary hover:bg-surface-hover transition-colors">
+          <button
+            class="px-4 h-10 rounded-lg bg-surface border border-border-default text-xs font-medium text-text-secondary hover:bg-surface-hover transition-colors"
+            @click="browseRiotClient"
+          >
             Buscar
           </button>
         </div>
-        <p class="text-[11px] text-text-muted mt-1.5">Se detecta automáticamente. Modifica solo si tienes problemas. (Auto-login próximamente)</p>
+        <p class="text-[11px] text-text-muted mt-1.5">Ruta de RiotClientServices.exe. Se usa para el auto-login al alquilar una cuenta.</p>
       </div>
     </div>
 

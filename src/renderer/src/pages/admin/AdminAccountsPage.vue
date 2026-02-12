@@ -16,6 +16,7 @@ const form = ref({
   name: '',
   riot_username: '',
   riot_tag: '',
+  login_username: '',
   encrypted_password: '',
   server: 'LAN',
   elo: 'Iron',
@@ -29,7 +30,7 @@ const servers = ['NA', 'EUW', 'EUNE', 'LAN', 'LAS', 'BR', 'KR', 'JP', 'OCE', 'TR
 const elos = ['Iron', 'Bronze', 'Silver', 'Gold', 'Platinum', 'Emerald', 'Diamond', 'Master', 'Grandmaster', 'Challenger']
 
 function resetForm(): void {
-  form.value = { name: '', riot_username: '', riot_tag: '', encrypted_password: '', server: 'LAN', elo: 'Iron', elo_division: 4, lp: 0, status: 'active', notes: '' }
+  form.value = { name: '', riot_username: '', riot_tag: '', login_username: '', encrypted_password: '', server: 'LAN', elo: 'Iron', elo_division: 4, lp: 0, status: 'active', notes: '' }
   editingId.value = null
   showAddForm.value = false
   errorMsg.value = ''
@@ -41,6 +42,7 @@ function startEdit(account: (typeof admin.accounts)[0]): void {
     name: account.name,
     riot_username: account.riot_username,
     riot_tag: account.riot_tag,
+    login_username: (account as any).account_credentials?.[0]?.login_username || '',
     encrypted_password: '',
     server: account.server,
     elo: account.elo,
@@ -58,6 +60,12 @@ async function handleSave(): Promise<void> {
 
   if (!form.value.name || !form.value.riot_username || !form.value.riot_tag) {
     errorMsg.value = 'Nombre, Riot Username y Tag son obligatorios'
+    saving.value = false
+    return
+  }
+
+  if (!form.value.login_username) {
+    errorMsg.value = 'El usuario/email de inicio de sesión (login) es obligatorio'
     saving.value = false
     return
   }
@@ -144,6 +152,10 @@ onMounted(() => admin.fetchAllAccounts())
           <input v-model="form.riot_tag" placeholder="NA1" class="w-full h-9 px-3 rounded-lg bg-bg-primary border border-border-default text-sm text-text-primary focus:outline-none focus:border-accent transition-colors" />
         </div>
         <div>
+          <label class="text-[11px] font-medium text-text-secondary block mb-1">Login (email/usuario)*</label>
+          <input v-model="form.login_username" class="w-full h-9 px-3 rounded-lg bg-bg-primary border border-border-default text-sm text-text-primary focus:outline-none focus:border-accent transition-colors" />
+        </div>
+        <div>
           <label class="text-[11px] font-medium text-text-secondary block mb-1">Contraseña{{ editingId ? ' (dejar vacío para no cambiar)' : '*' }}</label>
           <input v-model="form.encrypted_password" type="password" class="w-full h-9 px-3 rounded-lg bg-bg-primary border border-border-default text-sm text-text-primary focus:outline-none focus:border-accent transition-colors" />
         </div>
@@ -227,7 +239,7 @@ onMounted(() => admin.fetchAllAccounts())
             <td class="px-4 py-3 text-xs" :class="acc.current_rental_id ? 'text-warning' : 'text-success'">
               {{ acc.current_rental_id ? 'En uso' : 'Libre' }}
             </td>
-            <td class="px-4 py-3 text-xs text-text-muted max-w-[120px] truncate">{{ acc.notes || '—' }}</td>
+            <td class="px-4 py-3 text-xs text-text-muted max-w-30 truncate">{{ acc.notes || '—' }}</td>
             <td class="px-4 py-3">
               <div class="flex items-center justify-end gap-1">
                 <button v-if="acc.current_rental_id" class="p-1.5 rounded-md hover:bg-warning/10 text-warning transition-colors" title="Forzar liberación" @click="handleForceRelease(acc.id, acc.current_rental_id!)">

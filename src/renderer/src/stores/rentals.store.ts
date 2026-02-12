@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { supabase } from '@renderer/lib/supabase'
 import type { Rental } from '@renderer/types/database'
 
@@ -8,6 +8,9 @@ export const useRentalsStore = defineStore('rentals', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
+  const heartbeatRunning = ref(false)
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null
+
   const activeRentals = computed(() =>
     rentals.value.filter(r => r.status === 'active')
   )
@@ -15,6 +18,45 @@ export const useRentalsStore = defineStore('rentals', () => {
   const pastRentals = computed(() =>
     rentals.value.filter(r => r.status !== 'active')
   )
+
+  async function sendHeartbeat(): Promise<void> {
+    try {
+      const { data } = await supabase.auth.getSession()
+      if (!data.session) {
+        stopHeartbeat()
+        return
+      }
+
+      const rentalId = activeRentals.value[0]?.id
+      await supabase.functions.invoke('heartbeat-ping', {
+        body: rentalId ? { rental_id: rentalId } : {}
+      })
+    } catch {
+      // best-effort only
+    }
+  }
+
+  function startHeartbeat(): void {
+    if (heartbeatTimer) return
+    heartbeatRunning.value = true
+    void sendHeartbeat()
+    heartbeatTimer = setInterval(() => {
+      void sendHeartbeat()
+    }, 60_000)
+  }
+
+  function stopHeartbeat(): void {
+    heartbeatRunning.value = false
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer)
+      heartbeatTimer = null
+    }
+  }
+
+  function syncHeartbeat(): void {
+    if (activeRentals.value.length > 0) startHeartbeat()
+    else stopHeartbeat()
+  }
 
   async function fetchMyRentals(userId: string): Promise<void> {
     loading.value = true
@@ -31,6 +73,7 @@ export const useRentalsStore = defineStore('rentals', () => {
         return
       }
       rentals.value = (data ?? []) as Rental[]
+      syncHeartbeat()
     } finally {
       loading.value = false
     }
@@ -70,6 +113,7 @@ export const useRentalsStore = defineStore('rentals', () => {
       .eq('id', accountId)
 
     rentals.value.unshift(rental)
+    syncHeartbeat()
     return { error: null, rental }
   }
 
@@ -98,6 +142,8 @@ export const useRentalsStore = defineStore('rentals', () => {
         }
       }
     }
+
+    syncHeartbeat()
   }
 
   async function endRental(rentalId: string, accountId: string): Promise<{ error: string | null }> {
@@ -122,6 +168,8 @@ export const useRentalsStore = defineStore('rentals', () => {
       rentals.value[idx] = { ...rentals.value[idx], status: 'cancelled', ended_at: new Date().toISOString() }
     }
 
+    syncHeartbeat()
+
     return { error: null }
   }
 
@@ -141,9 +189,13 @@ export const useRentalsStore = defineStore('rentals', () => {
         } else if (payload.eventType === 'INSERT') {
           rentals.value.unshift(updated)
         }
+
+        syncHeartbeat()
       })
       .subscribe()
   }
+
+  watch(activeRentals, () => syncHeartbeat(), { deep: false })
 
   return {
     rentals,

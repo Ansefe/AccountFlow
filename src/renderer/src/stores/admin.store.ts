@@ -4,7 +4,9 @@ import { supabase } from '@renderer/lib/supabase'
 import type { Account, Profile, ActivityLog } from '@renderer/types/database'
 
 // Type for accounts returned from Edge Function (without encrypted_password)
-type AdminAccount = Omit<Account, 'encrypted_password'>
+type AdminAccount = Omit<Account, 'encrypted_password'> & {
+  account_credentials?: { login_username: string }[] | null
+}
 
 export const useAdminStore = defineStore('admin', () => {
   const accounts = ref<AdminAccount[]>([])
@@ -14,11 +16,22 @@ export const useAdminStore = defineStore('admin', () => {
 
   async function fetchAllAccounts(): Promise<void> {
     loading.value = true
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('accounts')
-      .select('id, name, riot_username, riot_tag, server, elo, elo_division, lp, status, is_banned, ban_type, puuid, current_rental_id, last_stats_sync, notes, created_at, updated_at')
+      .select(
+        'id, name, riot_username, riot_tag, server, elo, elo_division, lp, status, is_banned, ban_type, puuid, current_rental_id, last_stats_sync, notes, created_at, updated_at, account_credentials(login_username)'
+      )
       .order('created_at', { ascending: false })
-    accounts.value = (data ?? []) as AdminAccount[]
+
+    if (error) {
+      const { data: legacyData } = await supabase
+        .from('accounts')
+        .select('id, name, riot_username, riot_tag, server, elo, elo_division, lp, status, is_banned, ban_type, puuid, current_rental_id, last_stats_sync, notes, created_at, updated_at')
+        .order('created_at', { ascending: false })
+      accounts.value = (legacyData ?? []) as unknown as AdminAccount[]
+    } else {
+      accounts.value = (data ?? []) as unknown as AdminAccount[]
+    }
     loading.value = false
   }
 
@@ -26,6 +39,7 @@ export const useAdminStore = defineStore('admin', () => {
     name: string
     riot_username: string
     riot_tag: string
+    login_username: string
     encrypted_password: string
     server: string
     elo: string
@@ -40,6 +54,7 @@ export const useAdminStore = defineStore('admin', () => {
         name: account.name,
         riot_username: account.riot_username,
         riot_tag: account.riot_tag,
+        login_username: account.login_username,
         password: account.encrypted_password,
         server: account.server,
         elo: account.elo,
@@ -57,20 +72,22 @@ export const useAdminStore = defineStore('admin', () => {
   }
 
   async function updateAccount(id: string, updates: Partial<Account> & { encrypted_password?: string }): Promise<{ error: string | null }> {
+    const anyUpdates = updates as Partial<Account> & { encrypted_password?: string; login_username?: string }
     const { data, error } = await supabase.functions.invoke('manage-account', {
       method: 'PUT',
       body: JSON.stringify({
         id,
-        password: updates.encrypted_password || undefined,
-        name: updates.name,
-        riot_username: updates.riot_username,
-        riot_tag: updates.riot_tag,
-        server: updates.server,
-        elo: updates.elo,
-        elo_division: updates.elo_division,
-        lp: updates.lp,
-        status: updates.status,
-        notes: updates.notes
+        login_username: anyUpdates.login_username,
+        password: anyUpdates.encrypted_password || undefined,
+        name: anyUpdates.name,
+        riot_username: anyUpdates.riot_username,
+        riot_tag: anyUpdates.riot_tag,
+        server: anyUpdates.server,
+        elo: anyUpdates.elo,
+        elo_division: anyUpdates.elo_division,
+        lp: anyUpdates.lp,
+        status: anyUpdates.status,
+        notes: anyUpdates.notes
       }),
       headers: { 'Content-Type': 'application/json' }
     })

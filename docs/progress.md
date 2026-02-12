@@ -1,6 +1,6 @@
 # AccountFlow — Documento de Progreso
 
-> Última actualización: 8 de febrero de 2026
+> Última actualización: 11 de febrero de 2026
 
 ---
 
@@ -28,7 +28,7 @@
 |------|-------|
 | **Stack** | Electron 39 + Vue 3 + TypeScript + TailwindCSS 4 + Pinia 3 + Supabase |
 | **Build** | Limpio, 0 errores, ~1789 módulos. Instalador .exe generado |
-| **Fase actual** | Fase 1 completa + Lemon Squeezy integrado + infraestructura desplegada |
+| **Fase actual** | Fase 1 completa + Lemon Squeezy integrado + auto-login LoL operativo (API + fallback UI) |
 | **Páginas** | 11 (Login, Register, Dashboard, Accounts, MyRentals, Credits, Settings, Admin ×4) |
 | **Stores** | 4 (auth, accounts, rentals, admin) |
 | **Rutas** | 11 con guards de auth y admin |
@@ -143,15 +143,15 @@
 - [ ] Discord OAuth — Código listo, pero requiere configuración manual en Discord Developer Portal + Supabase (dejado para el final)
 - [ ] Riot Client path — Campo existe en Settings, pero no se guarda ni se utiliza aún
 - [ ] Compra de créditos en LS — Error CORS al hacer checkout (posiblemente producto no publicado o variant_id faltante en tabla `credit_packages`). Las suscripciones sí funcionan.
+- [ ] Endurecimiento final del fallback UI (bloqueo de input requiere permisos elevados en algunos equipos)
 
 ### ❌ No Implementado Aún
-- [ ] Auto-login LoL (nut.js)
 - [ ] Heartbeat system
 - [ ] Riot API sync
 - [ ] Auto-updates (electron-updater)
 - [ ] Notificaciones in-app
 - [ ] Restricción de RLS en profiles (seguridad crítica)
-- [ ] Encriptación de passwords de cuentas LoL (AES-256-GCM)
+- [ ] Endurecimiento de secretos en memoria del proceso (borrado explícito post-login)
 
 ---
 
@@ -441,7 +441,23 @@ El Main Process actual solo maneja la ventana frameless. Para producción necesi
 - Auto-updates vía electron-updater + GitHub Releases
 - `before-quit` handler para limpiar rentals activos
 
-### 6.5 Encriptación de credenciales
+### 6.6 Auto-login LoL (estado actual)
+
+Implementado y probado de extremo a extremo en entorno real:
+
+- Flujo principal por Riot Local API (`lockfile` + `/rso-auth/*` + `/riot-client-auth/*`).
+- Fallback automático (Camino B) por teclado simulado cuando Riot bloquea API (`captcha_not_allowed`/`auth_failure`).
+- Progreso en tiempo real Main → Renderer (`riot:login-progress`) para observabilidad.
+- Modo producción: credenciales solo desde Supabase Edge Function (`get-credentials`).
+- Eliminadas rutas de credenciales hardcodeadas/override por variables de entorno de test.
+
+Notas de seguridad actuales del fallback UI:
+
+- Verifica foco en cada tecla; si se pierde foco, aborta.
+- Si se pierde foco o falla `BlockInput`, se fuerza cierre de Riot Client para limpiar campos parciales.
+- `BlockInput` activado por defecto en Camino B (`RIOT_UI_BLOCK_INPUT=1`), pero puede fallar sin privilegios elevados.
+
+### 6.7 Encriptación de credenciales
 
 Las credenciales de las cuentas de LoL (`encrypted_password` en tabla `accounts`) aún **no tienen encriptación implementada**. Actualmente se almacenan en texto plano. Para producción:
 - Encriptar con AES-256-GCM antes de guardar
@@ -470,6 +486,9 @@ Las credenciales de las cuentas de LoL (`encrypted_password` en tabla `accounts`
 | 13 | ls-webhook module not found (deno.land/std) | Cambio a `node:crypto` y `node:buffer` imports | Feb 2026 |
 | 14 | redirect_url sin status param | Incluir `?status=success` en redirect_url del checkout | Feb 2026 |
 | 15 | Build .exe falla por symlinks (7-zip) | Habilitar Developer Mode en Windows | Feb 2026 |
+| 16 | Auto-login API bloqueado por Riot (`captcha_not_allowed`) | Fallback Camino B por teclado simulado + validación de foco + detección de tokens | Feb 2026 |
+| 17 | Flujo opaco de autologin (sin visibilidad de etapas) | Progreso IPC `riot:login-progress` + estado en MyRentalsPage | Feb 2026 |
+| 18 | Riesgo de exposición parcial al perder foco durante tipeo | Abort por foco + cierre inmediato de Riot Client + `BlockInput` por defecto | Feb 2026 |
 
 ---
 
@@ -489,15 +508,15 @@ El MVP es la versión mínima funcional que se puede distribuir a los primeros u
 | Secrets configurados | ✅ | Supabase Edge Functions + GitHub Actions |
 | Suscripción probada | ✅ | Checkout → pago → webhook → plan activado → email confirmación |
 
-### 8.2 Bloque B — Auto-Login LoL (Crítico — SIGUIENTE PASO)
+### 8.2 Bloque B — Auto-Login LoL (✅ Implementado, en hardening)
 
 | Tarea | Prioridad | Estimado | Detalle |
 |-------|-----------|----------|---------|
-| IPC handlers Main ↔ Renderer | 🔴 Alta | 1 día | Canales tipados para solicitar login/cierre |
-| nut.js auto-login | 🔴 Alta | 2-3 días | Detectar/abrir Riot Client, esperar ventana login, escribir credenciales |
-| Cierre automático del cliente | 🔴 Alta | 0.5 días | `taskkill` Riot Client al expirar rental o cerrar app |
-| Desencriptación de credenciales | 🔴 Alta | 1 día | AES-256 decrypt en Main Process, limpieza de memoria |
-| Botón "Iniciar Sesión" en UI | 🟡 Media | 0.5 días | En MyRentalsPage, para el rental activo |
+| IPC handlers Main ↔ Renderer | ✅ | — | `riot:login`, `riot:kill`, `riot:login-progress` |
+| Auto-login por Riot Local API | ✅ | — | Flujo lockfile + sesión RSO + login-token |
+| Fallback UI (Camino B) | ✅ | — | Teclado simulado con validación de foco y `BlockInput` |
+| Botón "Iniciar Sesión" en UI | ✅ | — | En MyRentalsPage para rental activo |
+| Endurecer limpieza de secretos en memoria | 🔴 Alta | 0.5-1 día | Borrado explícito de buffers/strings sensibles tras uso |
 
 ### 8.3 Bloque C — Seguridad (Crítico — SIGUIENTE PASO)
 
@@ -524,7 +543,7 @@ El MVP es la versión mínima funcional que se puede distribuir a los primeros u
 | Auto-updates (electron-updater) | 🟡 Media | 1 día | GitHub Releases como host |
 | Smoke test completo | 🔴 Alta | 1 día | Registro → login → comprar plan → alquilar → auto-login → liberar |
 
-### Estimación restante MVP: ~8-12 días de trabajo (Bloques B + C + D + E parcial)
+### Estimación restante MVP: ~5-8 días de trabajo (Bloques C + D + E parcial)
 
 ---
 
@@ -614,7 +633,7 @@ Más allá del MVP, estas son las fases posteriores:
 |--------|---------|------------|
 | **Sin pasarela de pago** | ✅ Resuelto | Lemon Squeezy integrado y funcionando (suscripciones probadas) |
 | **RLS de profiles muy permisivo** | Un usuario técnico podría darse créditos infinitos via SDK | Restringir RLS a solo `display_name`, forzar todo lo demás vía SECURITY DEFINER |
-| **Credenciales LoL sin encriptar** | Si la DB se compromete, se exponen todas las cuentas | Implementar AES-256-GCM antes de cargar datos reales |
+| **Credenciales LoL parcialmente visibles si falla el bloqueo/foco en Camino B** | Exposición parcial local en la UI del cliente de Riot | Ejecutar con privilegios elevados para `BlockInput`, abort fail-closed y cierre inmediato del cliente (implementado), más limpieza de memoria pendiente |
 | **Sin heartbeat** | Un usuario puede cerrar el app y mantener la cuenta lockeada indefinidamente | Implementar heartbeat + auto-release |
 
 ### Riesgos Medios
@@ -640,5 +659,5 @@ Más allá del MVP, estas son las fases posteriores:
 ---
 
 > **Documento generado para AccountFlow v1.0.0**
-> Última actualización: 8 de febrero de 2026
-> Próxima revisión sugerida: después de implementar auto-login LoL y seguridad (RLS + encriptación).
+> Última actualización: 11 de febrero de 2026
+> Próxima revisión sugerida: después de cerrar hardening de seguridad (RLS + encriptación + limpieza de secretos en memoria + heartbeat).

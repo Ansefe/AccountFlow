@@ -13,6 +13,29 @@ const api = {
   },
   shell: {
     openExternal: (url: string): void => ipcRenderer.send('shell:openExternal', url)
+  },
+  riot: {
+    login: (args: {
+      rentalId: string
+      supabaseUrl: string
+      anonKey: string
+      accessToken: string
+      riotClientPath: string
+    }): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke('riot:login', args),
+    onLoginProgress: (callback: (message: string) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, message: string): void => callback(message)
+      ipcRenderer.on('riot:login-progress', listener)
+      return (): void => {
+        ipcRenderer.removeListener('riot:login-progress', listener)
+      }
+    },
+    kill: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke('riot:kill')
+  },
+  dialog: {
+    openFile: (
+      options: { title?: string; filters?: { name: string; extensions: string[] }[] }
+    ): Promise<{ canceled: boolean; filePaths: string[] }> =>
+      ipcRenderer.invoke('dialog:openFile', options)
   }
 }
 

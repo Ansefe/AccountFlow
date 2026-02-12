@@ -12,9 +12,30 @@ interface ShellAPI {
   openExternal: (url: string) => void
 }
 
+interface RiotAPI {
+  login: (args: {
+    rentalId: string
+    supabaseUrl: string
+    anonKey: string
+    accessToken: string
+    riotClientPath: string
+  }) => Promise<{ success: boolean; error?: string }>
+  onLoginProgress: (callback: (message: string) => void) => () => void
+  kill: () => Promise<{ success: boolean; error?: string }>
+}
+
+interface DialogAPI {
+  openFile: (options: {
+    title?: string
+    filters?: { name: string; extensions: string[] }[]
+  }) => Promise<{ canceled: boolean; filePaths: string[] }>
+}
+
 interface API {
   window: WindowAPI
   shell: ShellAPI
+  riot: RiotAPI
+  dialog: DialogAPI
 }
 
 declare global {

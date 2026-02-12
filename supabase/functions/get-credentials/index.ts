@@ -3,7 +3,7 @@
 // Deploy: supabase functions deploy get-credentials
 //
 // POST { rental_id: string }
-// Returns: { riot_username, riot_tag, password }
+// Returns: { riot_username, riot_tag, login_username, password, server }
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
 
@@ -105,10 +105,10 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Fetch the account (with encrypted_password via service_role)
+    // Fetch account public fields
     const { data: account, error: accountError } = await supabase
       .from('accounts')
-      .select('riot_username, riot_tag, encrypted_password, server')
+      .select('id, riot_username, riot_tag, encrypted_password, server')
       .eq('id', rental.account_id)
       .single()
 
@@ -119,14 +119,23 @@ Deno.serve(async (req) => {
       })
     }
 
+    // Prefer credentials from dedicated table (login_username + encrypted_password)
+    const { data: credsRow } = await supabase
+      .from('account_credentials')
+      .select('login_username, encrypted_password')
+      .eq('account_id', rental.account_id)
+      .maybeSingle()
+
+    const encryptedPassword = credsRow?.encrypted_password || account.encrypted_password
+
     // Decrypt password
     let password: string
     try {
-      password = await decryptPassword(account.encrypted_password)
+      password = await decryptPassword(encryptedPassword)
     } catch {
       // If decryption fails, might be a legacy plain-text password
       console.warn('Decryption failed, returning raw value (legacy account)')
-      password = account.encrypted_password
+      password = encryptedPassword
     }
 
     // Log credential access
@@ -142,6 +151,7 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({
       riot_username: account.riot_username,
       riot_tag: account.riot_tag,
+      login_username: credsRow?.login_username || null,
       password,
       server: account.server
     }), {

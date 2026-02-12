@@ -1,7 +1,8 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { loginToRiotClient, killRiotClient } from './riot-client'
 
 // Asegura rutas escribibles para cache/storage (evita errores de "Acceso denegado" en Windows).
 const userDataDir = join(app.getPath('appData'), 'AccountFlow')
@@ -71,6 +72,38 @@ app.whenReady().then(() => {
   })
   ipcMain.on('window:close', () => mainWindow?.close())
   ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized())
+
+  // ── Riot Client IPC handlers ──
+  ipcMain.handle(
+    'riot:login',
+    async (
+      _,
+      args: {
+        rentalId: string
+        supabaseUrl: string
+        anonKey: string
+        accessToken: string
+        riotClientPath: string
+      }
+    ) => {
+      return loginToRiotClient({
+        ...args,
+        onProgress: (message: string) => {
+          mainWindow?.webContents.send('riot:login-progress', message)
+        }
+      })
+    }
+  )
+
+  ipcMain.handle('riot:kill', async () => {
+    return killRiotClient()
+  })
+
+  // ── File dialog IPC handler ──
+  ipcMain.handle('dialog:openFile', async (_, options: Electron.OpenDialogOptions) => {
+    if (!mainWindow) return { canceled: true, filePaths: [] }
+    return dialog.showOpenDialog(mainWindow, options)
+  })
 
   createWindow()
 
