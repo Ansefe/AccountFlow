@@ -12,11 +12,17 @@ jobs:
     steps:
       - name: Call check-rental-matches Edge Function
         run: |
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            -X POST "${{ secrets.SUPABASE_URL }}/functions/v1/check-rental-matches" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "${{ secrets.SUPABASE_URL }}/functions/v1/check-rental-matches" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json")
-          echo "HTTP Status: $HTTP_STATUS"
-          if [ "$HTTP_STATUS" -ne 200 ]; then
-            echo "::warning::check-rental-matches returned $HTTP_STATUS"
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "Status: $HTTP_CODE"
+          echo "Response: $BODY"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::warning::check-rental-matches returned $HTTP_CODE — $BODY"
           fi

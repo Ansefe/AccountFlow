@@ -3,17 +3,18 @@
 // handles idle timeout (no matches in configurable period) with proportional refund,
 // and completes rentals when all matches are consumed.
 //
-// Deploy: supabase functions deploy check-rental-matches
-// Auth:   service role key as Bearer.
+// Deploy: supabase functions deploy check-rental-matches --no-verify-jwt
+// Auth:   service role key OR CRON_SECRET as Bearer.
 //
 // Required env vars:
-//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, RIOT_API_KEY
+//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, RIOT_API_KEY, CRON_SECRET
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const riotApiKey = Deno.env.get('RIOT_API_KEY') || ''
+const cronSecret = Deno.env.get('CRON_SECRET')
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -122,10 +123,11 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405)
 
-  // Auth: service role only
+  // Auth: accept service_role key or CRON_SECRET
   const authHeader = req.headers.get('Authorization')
   const token = authHeader?.replace('Bearer ', '') || ''
-  if (!token || token !== supabaseServiceKey) return jsonResponse({ error: 'Unauthorized' }, 401)
+  const isAuthorized = token === supabaseServiceKey || (cronSecret && token === cronSecret)
+  if (!token || !isAuthorized) return jsonResponse({ error: 'Unauthorized' }, 401)
 
   if (!riotApiKey) return jsonResponse({ error: 'RIOT_API_KEY not configured' }, 500)
 
