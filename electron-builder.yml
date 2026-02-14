@@ -1,5 +1,5 @@
-appId: com.electron.app
-productName: accountflow
+appId: com.accountflow.app
+productName: AccountFlow
 directories:
   buildResources: build
 files:
@@ -11,6 +11,11 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+publish:
+  provider: github
+  owner: Ansefe
+  repo: AccountFlow
+  releaseType: release
 win:
   executableName: accountflow
 nsis:

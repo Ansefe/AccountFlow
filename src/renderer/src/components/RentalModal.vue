@@ -84,20 +84,16 @@ async function handleRent(): Promise<void> {
     const creditsToSpend = selectedOption.value.credits
     const matchesTotal = selectedOption.value.matches
 
-    // Deduct credits (prefer subscription first, then purchased)
-    const fromSubscription = Math.min(auth.profile!.subscription_credits, creditsToSpend)
-    const fromPurchased = creditsToSpend - fromSubscription
-
-    const { error: creditError } = await supabase
-      .from('profiles')
-      .update({
-        purchased_credits: auth.profile!.purchased_credits - fromPurchased,
-        subscription_credits: auth.profile!.subscription_credits - fromSubscription
-      })
-      .eq('id', auth.user.id)
+    // Deduct credits atomically via SECURITY DEFINER function
+    const { error: creditError } = await supabase.rpc('spend_credits', {
+      p_amount: creditsToSpend,
+      p_description: `Alquiler de ${props.account.name} por ${matchesTotal} partida${matchesTotal > 1 ? 's' : ''}`
+    })
 
     if (creditError) {
-      errorMsg.value = 'Error al descontar créditos: ' + creditError.message
+      errorMsg.value = creditError.message.includes('Insufficient')
+        ? 'No tienes suficientes créditos.'
+        : 'Error al descontar créditos: ' + creditError.message
       return
     }
 
@@ -113,15 +109,6 @@ async function handleRent(): Promise<void> {
       errorMsg.value = 'Error al crear alquiler: ' + rentalError
       return
     }
-
-    // Log the credit transaction
-    await supabase.from('credit_transactions').insert({
-      user_id: auth.user.id,
-      amount: -creditsToSpend,
-      balance_type: fromSubscription > 0 ? 'subscription' : 'purchased',
-      type: 'rental_spend',
-      description: `Alquiler de ${props.account.name} por ${matchesTotal} partida${matchesTotal > 1 ? 's' : ''}`
-    })
 
     // Log the activity
     await supabase.from('activity_log').insert({

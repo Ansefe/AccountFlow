@@ -22,6 +22,15 @@ const matchProgress = computed(() => {
   return `${activeRental.value.matches_used} / ${activeRental.value.matches_total}`
 })
 
+const planLabel = computed(() => {
+  const labels: Record<string, string> = {
+    early_bird: 'Early Bird',
+    basic: 'Basic',
+    unlimited: 'Unlimited'
+  }
+  return labels[auth.profile?.plan_type ?? ''] ?? 'Ninguno'
+})
+
 const progressPercent = computed(() => {
   if (!activeRental.value) return 0
   const total = activeRental.value.matches_total ?? 1
@@ -68,7 +77,7 @@ async function handleRelease(): Promise<void> {
         <div class="text-xs text-text-secondary mb-1">Plan Actual</div>
         <div class="flex items-center gap-2">
           <Shield class="w-5 h-5 text-accent" />
-          <span class="text-3xl font-bold text-text-primary">{{ auth.profile?.plan_type === 'basic' ? 'Basic' : auth.profile?.plan_type === 'unlimited' ? 'Unlimited' : 'Ninguno' }}</span>
+          <span class="text-3xl font-bold text-text-primary">{{ planLabel }}</span>
         </div>
         <div v-if="auth.profile?.plan_expires_at" class="text-xs text-text-muted mt-1">Renueva: {{ new Date(auth.profile.plan_expires_at).toLocaleDateString() }}</div>
       </div>

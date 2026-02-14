@@ -1,6 +1,7 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { autoUpdater } from 'electron-updater'
 import icon from '../../resources/icon.png?asset'
 import { loginToRiotClient, killRiotClient } from './riot-client'
 
@@ -106,6 +107,50 @@ app.whenReady().then(() => {
   })
 
   createWindow()
+
+  // ── Auto-updater ──
+  autoUpdater.autoDownload = true
+  autoUpdater.autoInstallOnAppQuit = true
+
+  autoUpdater.on('update-available', (info) => {
+    mainWindow?.webContents.send('updater:status', {
+      status: 'downloading',
+      version: info.version
+    })
+  })
+
+  autoUpdater.on('update-downloaded', (info) => {
+    mainWindow?.webContents.send('updater:status', {
+      status: 'ready',
+      version: info.version
+    })
+  })
+
+  autoUpdater.on('error', (err) => {
+    console.error('Auto-updater error:', err.message)
+  })
+
+  // Check for updates after window is ready (only in production)
+  if (!is.dev) {
+    setTimeout(() => autoUpdater.checkForUpdates(), 3000)
+    // Re-check every 30 minutes (catches urgent hotfixes quickly)
+    setInterval(() => autoUpdater.checkForUpdates(), 30 * 60 * 1000)
+  }
+
+  // IPC: renderer can request update install
+  ipcMain.on('updater:install', () => {
+    autoUpdater.quitAndInstall(false, true)
+  })
+
+  // IPC: renderer can manually trigger update check
+  ipcMain.handle('updater:check', async () => {
+    try {
+      const result = await autoUpdater.checkForUpdates()
+      return { updateAvailable: !!result?.updateInfo, version: result?.updateInfo?.version }
+    } catch (err: unknown) {
+      return { updateAvailable: false, error: (err as Error).message }
+    }
+  })
 
   mainWindow?.on('maximize', () => {
     mainWindow?.webContents.send('window:maximized-change', true)

@@ -24,6 +24,52 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- "Admin can update any profile" ON profiles FOR UPDATE USING (is_admin());
 
 -- ============================================================
+-- 1b. SPEND CREDITS — atomic deduction for rentals
+-- ============================================================
+
+-- Users can spend their own credits (subscription first, then purchased)
+CREATE OR REPLACE FUNCTION spend_credits(p_amount INTEGER, p_description TEXT DEFAULT '')
+RETURNS void AS $$
+DECLARE
+  sub_credits INTEGER;
+  pur_credits INTEGER;
+  from_sub INTEGER;
+  from_pur INTEGER;
+BEGIN
+  SELECT subscription_credits, purchased_credits
+  INTO sub_credits, pur_credits
+  FROM profiles WHERE id = auth.uid() FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Profile not found';
+  END IF;
+
+  IF (sub_credits + pur_credits) < p_amount THEN
+    RAISE EXCEPTION 'Insufficient credits (have %, need %)', sub_credits + pur_credits, p_amount;
+  END IF;
+
+  -- Prefer subscription credits first
+  from_sub := LEAST(sub_credits, p_amount);
+  from_pur := p_amount - from_sub;
+
+  UPDATE profiles
+  SET subscription_credits = sub_credits - from_sub,
+      purchased_credits = pur_credits - from_pur
+  WHERE id = auth.uid();
+
+  -- Log transaction
+  INSERT INTO credit_transactions (user_id, amount, balance_type, type, description)
+  VALUES (
+    auth.uid(),
+    -p_amount,
+    CASE WHEN from_sub > 0 THEN 'subscription'::credit_balance_type ELSE 'purchased'::credit_balance_type END,
+    'rental_spend',
+    COALESCE(NULLIF(p_description, ''), 'Rental spend: -' || p_amount || ' credits')
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ============================================================
 -- 2. ADMIN-ONLY FUNCTIONS FOR PROFILE MUTATIONS
 -- ============================================================
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Loader2, Check, LogOut, Crown, Zap, Star, Sparkles, Timer, ExternalLink, CreditCard } from 'lucide-vue-next'
+import { Loader2, Check, LogOut, Crown, Zap, Star, Sparkles, Timer, ExternalLink, CreditCard, RefreshCw, Download } from 'lucide-vue-next'
 import { useAuthStore } from '@renderer/stores/auth.store'
 import { supabase } from '@renderer/lib/supabase'
 import { checkoutSubscription, openCustomerPortal } from '@renderer/lib/lemonsqueezy'
@@ -20,6 +20,9 @@ const changingPlan = ref(false)
 const riotClientPath = ref(
   localStorage.getItem('riotClientPath') || 'C:\\Riot Games\\Riot Client\\RiotClientServices.exe'
 )
+
+const checkingUpdate = ref(false)
+const updateResult = ref<string | null>(null)
 
 // Persist Riot Client path whenever it changes
 watch(riotClientPath, (v) => localStorage.setItem('riotClientPath', v))
@@ -184,6 +187,28 @@ async function handleLogout(): Promise<void> {
   await auth.signOut()
   router.push('/login')
 }
+
+async function checkForUpdate(): Promise<void> {
+  checkingUpdate.value = true
+  updateResult.value = null
+  try {
+    const result = await window.api?.updater?.check()
+    if (!result) {
+      updateResult.value = 'Solo disponible en la app de escritorio.'
+      return
+    }
+    if (result.updateAvailable) {
+      updateResult.value = `¡Nueva versión ${result.version} encontrada! Se descargará automáticamente.`
+    } else {
+      updateResult.value = 'Ya tienes la última versión.'
+    }
+  } catch {
+    updateResult.value = 'Error al buscar actualizaciones.'
+  } finally {
+    checkingUpdate.value = false
+    setTimeout(() => { updateResult.value = null }, 5000)
+  }
+}
 </script>
 
 <template>
@@ -336,6 +361,24 @@ async function handleLogout(): Promise<void> {
         </div>
         <p class="text-[11px] text-text-muted mt-1.5">Ruta de RiotClientServices.exe. Se usa para el auto-login al alquilar una cuenta.</p>
       </div>
+    </div>
+
+    <!-- Updates -->
+    <div class="rounded-xl bg-surface border border-border-default p-6">
+      <h2 class="text-base font-semibold text-text-primary mb-4">Actualizaciones</h2>
+      <p class="text-xs text-text-muted mb-3">La app busca actualizaciones automáticamente cada 30 minutos. También puedes buscar manualmente.</p>
+      <div v-if="updateResult" class="mb-3 p-2.5 rounded-lg bg-accent/10 border border-accent/30 text-xs text-accent">
+        {{ updateResult }}
+      </div>
+      <button
+        :disabled="checkingUpdate"
+        class="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-accent/10 border border-accent/30 text-xs font-semibold text-accent hover:bg-accent/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        @click="checkForUpdate"
+      >
+        <RefreshCw v-if="checkingUpdate" class="w-3.5 h-3.5 animate-spin" />
+        <Download v-else class="w-3.5 h-3.5" />
+        {{ checkingUpdate ? 'Buscando...' : 'Buscar actualizaciones' }}
+      </button>
     </div>
 
     <!-- Session -->

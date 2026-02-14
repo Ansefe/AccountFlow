@@ -36,6 +36,18 @@ const api = {
       options: { title?: string; filters?: { name: string; extensions: string[] }[] }
     ): Promise<{ canceled: boolean; filePaths: string[] }> =>
       ipcRenderer.invoke('dialog:openFile', options)
+  },
+  updater: {
+    onStatus: (callback: (data: { status: string; version: string }) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: { status: string; version: string }): void => callback(data)
+      ipcRenderer.on('updater:status', listener)
+      return (): void => {
+        ipcRenderer.removeListener('updater:status', listener)
+      }
+    },
+    install: (): void => ipcRenderer.send('updater:install'),
+    check: (): Promise<{ updateAvailable: boolean; version?: string; error?: string }> =>
+      ipcRenderer.invoke('updater:check')
   }
 }
 

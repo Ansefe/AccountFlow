@@ -31,11 +31,18 @@ interface DialogAPI {
   }) => Promise<{ canceled: boolean; filePaths: string[] }>
 }
 
+interface UpdaterAPI {
+  onStatus: (callback: (data: { status: string; version: string }) => void) => () => void
+  install: () => void
+  check: () => Promise<{ updateAvailable: boolean; version?: string; error?: string }>
+}
+
 interface API {
   window: WindowAPI
   shell: ShellAPI
   riot: RiotAPI
   dialog: DialogAPI
+  updater: UpdaterAPI
 }
 
 declare global {

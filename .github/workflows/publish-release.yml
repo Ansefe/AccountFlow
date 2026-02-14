@@ -1,0 +1,37 @@
+# Builds and publishes a new release when a version tag is pushed.
+# Usage: git tag v1.0.1 && git push origin v1.0.1
+# The release will contain the Windows installer (.exe) and update files (latest.yml).
+
+name: Publish Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: accountflow/package-lock.json
+
+      - name: Install dependencies
+        working-directory: accountflow
+        run: npm ci
+
+      - name: Build and publish
+        working-directory: accountflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build && npx electron-builder --win --publish always
