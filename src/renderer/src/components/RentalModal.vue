@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { X, Clock, Coins, Loader2, Crown } from 'lucide-vue-next'
+import { ref, computed, onMounted } from 'vue'
+import { X, Gamepad2, Coins, Loader2, Crown } from 'lucide-vue-next'
 import { useAuthStore } from '@renderer/stores/auth.store'
 import { useRentalsStore } from '@renderer/stores/rentals.store'
 import { useAccountsStore } from '@renderer/stores/accounts.store'
@@ -20,21 +20,39 @@ const auth = useAuthStore()
 const rentalsStore = useRentalsStore()
 const accountsStore = useAccountsStore()
 
-const selectedDuration = ref<number | null>(null)
+const selectedMatches = ref<number | null>(null)
 const isRenting = ref(false)
 const errorMsg = ref('')
 
-const durations = [
-  { minutes: 30, credits: 25, label: '30m' },
-  { minutes: 60, credits: 50, label: '1h' },
-  { minutes: 120, credits: 90, label: '2h' },
-  { minutes: 240, credits: 160, label: '4h' },
-  { minutes: 480, credits: 280, label: '8h' },
-  { minutes: 1440, credits: 500, label: '24h' }
-]
+// Default match packages (overridden from app_settings if available)
+const matchPackages = ref<{ matches: number; credits: number }[]>([
+  { matches: 1, credits: 35 },
+  { matches: 3, credits: 95 },
+  { matches: 5, credits: 150 },
+  { matches: 10, credits: 270 }
+])
+
+onMounted(async () => {
+  // Load match packages from app_settings
+  const { data } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'match_packages')
+    .single()
+
+  if (data?.value) {
+    try {
+      const raw = typeof data.value === 'string' ? JSON.parse(data.value) : data.value
+      const parsed = Object.entries(raw)
+        .map(([k, v]) => ({ matches: Number(k), credits: Number(v) }))
+        .sort((a, b) => a.matches - b.matches)
+      if (parsed.length > 0) matchPackages.value = parsed
+    } catch { /* use defaults */ }
+  }
+})
 
 const selectedOption = computed(() =>
-  durations.find(d => d.minutes === selectedDuration.value) ?? null
+  matchPackages.value.find(p => p.matches === selectedMatches.value) ?? null
 )
 
 const canAfford = computed(() => {
@@ -64,6 +82,7 @@ async function handleRent(): Promise<void> {
 
   try {
     const creditsToSpend = selectedOption.value.credits
+    const matchesTotal = selectedOption.value.matches
 
     // Deduct credits (prefer subscription first, then purchased)
     const fromSubscription = Math.min(auth.profile!.subscription_credits, creditsToSpend)
@@ -82,11 +101,11 @@ async function handleRent(): Promise<void> {
       return
     }
 
-    // Create the rental
+    // Create the rental (match-based)
     const { error: rentalError } = await rentalsStore.startRental(
       auth.user.id,
       props.account.id,
-      selectedOption.value.minutes,
+      matchesTotal,
       creditsToSpend
     )
 
@@ -101,7 +120,7 @@ async function handleRent(): Promise<void> {
       amount: -creditsToSpend,
       balance_type: fromSubscription > 0 ? 'subscription' : 'purchased',
       type: 'rental_spend',
-      description: `Alquiler de ${props.account.name} por ${selectedOption.value.label}`
+      description: `Alquiler de ${props.account.name} por ${matchesTotal} partida${matchesTotal > 1 ? 's' : ''}`
     })
 
     // Log the activity
@@ -111,7 +130,7 @@ async function handleRent(): Promise<void> {
       metadata: {
         account_id: props.account.id,
         account_name: props.account.name,
-        duration_minutes: selectedOption.value.minutes,
+        matches_total: matchesTotal,
         credits_spent: creditsToSpend
       }
     })
@@ -134,13 +153,11 @@ async function handleUnlimitedRent(): Promise<void> {
   errorMsg.value = ''
 
   try {
-    // Unlimited: 30-day rental, 0 credits
-    const durationMinutes = 43200
-
+    // Unlimited plan: 999 matches (effectively unlimited), 0 credits
     const { error: rentalError } = await rentalsStore.startRental(
       auth.user.id,
       props.account.id,
-      durationMinutes,
+      999,
       0
     )
 
@@ -155,7 +172,7 @@ async function handleUnlimitedRent(): Promise<void> {
       metadata: {
         account_id: props.account.id,
         account_name: props.account.name,
-        duration_minutes: durationMinutes,
+        matches_total: 999,
         credits_spent: 0,
         unlimited: true
       }
@@ -238,29 +255,32 @@ async function handleUnlimitedRent(): Promise<void> {
           </button>
         </template>
 
-        <!-- NORMAL USER: duration + credit flow -->
+        <!-- NORMAL USER: match package + credit flow -->
         <template v-else>
-          <!-- Duration Selection -->
+          <!-- Match Package Selection -->
           <div>
             <div class="flex items-center gap-1.5 text-sm font-medium text-text-secondary mb-3">
-              <Clock class="w-4 h-4" />
-              Selecciona duración del alquiler:
+              <Gamepad2 class="w-4 h-4" />
+              Selecciona paquete de partidas:
             </div>
-            <div class="grid grid-cols-3 gap-2">
+            <div class="grid grid-cols-2 gap-2">
               <button
-                v-for="d in durations"
-                :key="d.minutes"
-                class="flex flex-col items-center gap-1 p-3 rounded-xl border transition-all"
-                :class="selectedDuration === d.minutes
+                v-for="pkg in matchPackages"
+                :key="pkg.matches"
+                class="flex flex-col items-center gap-1 p-4 rounded-xl border transition-all"
+                :class="selectedMatches === pkg.matches
                   ? 'border-accent bg-accent/10 ring-1 ring-accent/30'
                   : 'border-border-default hover:border-border-hover hover:bg-surface-hover'"
-                @click="selectedDuration = d.minutes"
+                @click="selectedMatches = pkg.matches"
               >
-                <span class="text-sm font-bold" :class="selectedDuration === d.minutes ? 'text-accent' : 'text-text-primary'">
-                  {{ d.label }}
+                <span class="text-lg font-bold" :class="selectedMatches === pkg.matches ? 'text-accent' : 'text-text-primary'">
+                  {{ pkg.matches }} {{ pkg.matches === 1 ? 'partida' : 'partidas' }}
                 </span>
-                <span class="text-xs font-mono" :class="selectedDuration === d.minutes ? 'text-accent/70' : 'text-text-muted'">
-                  {{ d.credits }} cr
+                <span class="text-xs font-mono" :class="selectedMatches === pkg.matches ? 'text-accent/70' : 'text-text-muted'">
+                  {{ pkg.credits }} cr
+                </span>
+                <span v-if="pkg.matches > 1" class="text-[10px] text-text-muted">
+                  {{ Math.round(pkg.credits / pkg.matches) }} cr/partida
                 </span>
               </button>
             </div>
@@ -304,7 +324,7 @@ async function handleUnlimitedRent(): Promise<void> {
           >
             <Loader2 v-if="isRenting" class="w-4 h-4 animate-spin" />
             <Coins v-else class="w-4 h-4" />
-            {{ isRenting ? 'Procesando...' : selectedOption ? `Alquilar por ${selectedOption.credits} créditos` : 'Selecciona una duración' }}
+            {{ isRenting ? 'Procesando...' : selectedOption ? `Alquilar por ${selectedOption.credits} créditos` : 'Selecciona un paquete' }}
           </button>
         </template>
       </div>

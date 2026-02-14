@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, computed, ref, onUnmounted } from 'vue'
+import { onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { Coins, Shield, UserPlus, RefreshCw, History, Headphones, Play, Unlock } from 'lucide-vue-next'
 import { useAuthStore } from '@renderer/stores/auth.store'
@@ -17,32 +17,15 @@ const activeAccount = computed(() => {
   return accountsStore.accounts.find(a => a.id === activeRental.value!.account_id) ?? null
 })
 
-// Countdown timer
-const remainingTime = ref('--:--:--')
-let timerInterval: ReturnType<typeof setInterval> | null = null
-
-function updateTimer(): void {
-  if (!activeRental.value) {
-    remainingTime.value = '--:--:--'
-    return
-  }
-  const now = Date.now()
-  const expires = new Date(activeRental.value.expires_at).getTime()
-  const diff = Math.max(0, expires - now)
-  const h = Math.floor(diff / 3600000)
-  const m = Math.floor((diff % 3600000) / 60000)
-  const s = Math.floor((diff % 60000) / 1000)
-  remainingTime.value = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-}
+const matchProgress = computed(() => {
+  if (!activeRental.value) return '0 / 0'
+  return `${activeRental.value.matches_used} / ${activeRental.value.matches_total}`
+})
 
 const progressPercent = computed(() => {
   if (!activeRental.value) return 0
-  const start = new Date(activeRental.value.started_at).getTime()
-  const end = new Date(activeRental.value.expires_at).getTime()
-  const now = Date.now()
-  const total = end - start
-  const elapsed = now - start
-  return Math.min(100, Math.max(0, (elapsed / total) * 100))
+  const total = activeRental.value.matches_total ?? 1
+  return Math.min(100, Math.max(0, (activeRental.value.matches_used / total) * 100))
 })
 
 onMounted(async () => {
@@ -52,15 +35,6 @@ onMounted(async () => {
     rentalsStore.subscribeToChanges(auth.user.id)
   }
   accountsStore.subscribeToChanges()
-  timerInterval = setInterval(() => {
-    updateTimer()
-    rentalsStore.checkAndExpireRentals()
-  }, 1000)
-  updateTimer()
-})
-
-onUnmounted(() => {
-  if (timerInterval) clearInterval(timerInterval)
 })
 
 function openSupport(): void {
@@ -69,6 +43,7 @@ function openSupport(): void {
 
 async function handleRelease(): Promise<void> {
   if (!activeRental.value || !activeAccount.value) return
+  await window.api.riot.kill()
   await rentalsStore.endRental(activeRental.value.id, activeRental.value.account_id)
   await accountsStore.fetchAccounts()
 }
@@ -95,7 +70,7 @@ async function handleRelease(): Promise<void> {
           <Shield class="w-5 h-5 text-accent" />
           <span class="text-3xl font-bold text-text-primary">{{ auth.profile?.plan_type === 'basic' ? 'Basic' : auth.profile?.plan_type === 'unlimited' ? 'Unlimited' : 'Ninguno' }}</span>
         </div>
-        <div v-if="auth.profile?.plan_expires_at" class="text-xs text-text-muted mt-1">Expira: {{ new Date(auth.profile.plan_expires_at).toLocaleDateString() }}</div>
+        <div v-if="auth.profile?.plan_expires_at" class="text-xs text-text-muted mt-1">Renueva: {{ new Date(auth.profile.plan_expires_at).toLocaleDateString() }}</div>
       </div>
 
       <!-- Active Rental Card -->
@@ -108,8 +83,8 @@ async function handleRelease(): Promise<void> {
             <div class="text-xs text-text-secondary mb-1">Alquiler Activo: {{ activeAccount.name }}</div>
 
             <div class="text-center my-3">
-              <div class="text-4xl font-bold font-mono text-text-primary tracking-wider">{{ remainingTime }}</div>
-              <div class="text-xs text-text-secondary mt-0.5">Restantes</div>
+              <div class="text-4xl font-bold font-mono text-text-primary tracking-wider">{{ matchProgress }}</div>
+              <div class="text-xs text-text-secondary mt-0.5">partidas jugadas</div>
             </div>
 
             <div class="w-full h-1 rounded-full bg-bg-primary mb-3">
@@ -202,7 +177,7 @@ async function handleRelease(): Promise<void> {
             <tr class="border-b border-border-default">
               <th class="text-left text-xs font-semibold text-text-secondary px-4 py-3">Fecha</th>
               <th class="text-left text-xs font-semibold text-text-secondary px-4 py-3">Cuenta</th>
-              <th class="text-left text-xs font-semibold text-text-secondary px-4 py-3">Duración</th>
+              <th class="text-left text-xs font-semibold text-text-secondary px-4 py-3">Partidas</th>
               <th class="text-left text-xs font-semibold text-text-secondary px-4 py-3">Estado</th>
             </tr>
           </thead>
@@ -219,13 +194,13 @@ async function handleRelease(): Promise<void> {
               <td class="px-4 py-3 text-sm text-text-primary">
                 {{ accountsStore.accounts.find(a => a.id === rental.account_id)?.name || 'Cuenta' }}
               </td>
-              <td class="px-4 py-3 text-sm text-text-secondary font-mono">{{ rental.duration_minutes }}m</td>
+              <td class="px-4 py-3 text-sm text-text-secondary font-mono">{{ rental.matches_used }}/{{ rental.matches_total }}</td>
               <td class="px-4 py-3">
                 <span
                   class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold"
                   :class="rental.status === 'active' ? 'bg-warning/15 text-warning' : rental.status === 'expired' || rental.status === 'cancelled' ? 'bg-success/15 text-success' : 'bg-error/15 text-error'"
                 >
-                  {{ rental.status === 'active' ? 'En curso' : rental.status === 'expired' || rental.status === 'cancelled' ? 'Completado' : 'Forzado' }}
+                  {{ rental.status === 'active' ? 'En curso' : rental.status === 'completed' || rental.status === 'expired' || rental.status === 'cancelled' ? 'Completado' : 'Forzado' }}
                 </span>
               </td>
             </tr>

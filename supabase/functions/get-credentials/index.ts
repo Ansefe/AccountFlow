@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
     // Verify the rental belongs to this user AND is currently active
     const { data: rental, error: rentalError } = await supabase
       .from('rentals')
-      .select('id, user_id, account_id, status, expires_at')
+      .select('id, user_id, account_id, status')
       .eq('id', rental_id)
       .single()
 
@@ -92,14 +92,6 @@ Deno.serve(async (req) => {
 
     if (rental.status !== 'active') {
       return new Response(JSON.stringify({ error: 'Rental is not active' }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
-
-    // Check expiration
-    if (new Date(rental.expires_at) < new Date()) {
-      return new Response(JSON.stringify({ error: 'Rental has expired' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })

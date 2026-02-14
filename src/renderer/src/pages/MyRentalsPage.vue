@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { Play, Unlock, Clock, Loader2, Square, AlertTriangle } from 'lucide-vue-next'
+import { Play, Unlock, Loader2, Square, AlertTriangle, Gamepad2 } from 'lucide-vue-next'
 import { useAuthStore } from '@renderer/stores/auth.store'
 import { useAccountsStore } from '@renderer/stores/accounts.store'
 import { useRentalsStore } from '@renderer/stores/rentals.store'
@@ -83,23 +83,15 @@ const activeAccount = computed(() => {
   return accountsStore.accounts.find(a => a.id === activeRental.value!.account_id) ?? null
 })
 
-const remainingTime = ref('--:--:--')
-let timerInterval: ReturnType<typeof setInterval> | null = null
-
-function updateTimer(): void {
-  if (!activeRental.value) { remainingTime.value = '--:--:--'; return }
-  const diff = Math.max(0, new Date(activeRental.value.expires_at).getTime() - Date.now())
-  const h = Math.floor(diff / 3600000)
-  const m = Math.floor((diff % 3600000) / 60000)
-  const s = Math.floor((diff % 60000) / 1000)
-  remainingTime.value = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-}
+const matchProgress = computed(() => {
+  if (!activeRental.value) return '0 / 0'
+  return `${activeRental.value.matches_used} / ${activeRental.value.matches_total}`
+})
 
 const progressPercent = computed(() => {
   if (!activeRental.value) return 0
-  const start = new Date(activeRental.value.started_at).getTime()
-  const end = new Date(activeRental.value.expires_at).getTime()
-  return Math.min(100, Math.max(0, ((Date.now() - start) / (end - start)) * 100))
+  const total = activeRental.value.matches_total ?? 1
+  return Math.min(100, Math.max(0, (activeRental.value.matches_used / total) * 100))
 })
 
 /** Auto-login via Riot Client local API (credentials fetched in Main Process) */
@@ -181,15 +173,9 @@ onMounted(async () => {
 
   await accountsStore.fetchAccounts()
   if (auth.user) await rentalsStore.fetchMyRentals(auth.user.id)
-  timerInterval = setInterval(() => {
-    updateTimer()
-    rentalsStore.checkAndExpireRentals()
-  }, 1000)
-  updateTimer()
 })
 
 onUnmounted(() => {
-  if (timerInterval) clearInterval(timerInterval)
   if (offLoginProgress) {
     offLoginProgress()
     offLoginProgress = null
@@ -224,12 +210,12 @@ onUnmounted(() => {
               <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-bg-primary text-text-secondary border border-border-default">{{ activeAccount.server }}</span>
             </div>
           </div>
-          <Clock class="w-5 h-5 text-accent" />
+          <Gamepad2 class="w-5 h-5 text-accent" />
         </div>
 
         <div class="text-center py-6">
-          <div class="text-5xl font-bold font-mono text-text-primary tracking-wider">{{ remainingTime }}</div>
-          <div class="text-sm text-text-secondary mt-1">restante</div>
+          <div class="text-5xl font-bold font-mono text-text-primary tracking-wider">{{ matchProgress }}</div>
+          <div class="text-sm text-text-secondary mt-1">partidas jugadas</div>
         </div>
 
         <div class="w-full h-1.5 rounded-full bg-bg-primary mb-6">
@@ -301,12 +287,12 @@ onUnmounted(() => {
             <tr v-for="r in rentalsStore.pastRentals" :key="r.id" class="border-b border-border-default/50 hover:bg-surface-hover transition-colors">
               <td class="px-4 py-3 text-xs text-text-secondary font-mono">{{ new Date(r.started_at).toLocaleString() }}</td>
               <td class="px-4 py-3 text-sm text-text-primary">{{ accountsStore.accounts.find(a => a.id === r.account_id)?.name || 'Cuenta' }}</td>
-              <td class="px-4 py-3 text-sm text-text-secondary font-mono">{{ r.duration_minutes }}m</td>
+              <td class="px-4 py-3 text-sm text-text-secondary font-mono">{{ r.matches_used }}/{{ r.matches_total }} partidas</td>
               <td class="px-4 py-3 text-sm font-mono text-error">-{{ r.credits_spent }}</td>
               <td class="px-4 py-3">
                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold"
-                      :class="r.status === 'expired' || r.status === 'cancelled' ? 'bg-success/15 text-success' : 'bg-error/15 text-error'">
-                  {{ r.status === 'expired' || r.status === 'cancelled' ? 'Completado' : 'Forzado' }}
+                      :class="r.status === 'completed' || r.status === 'expired' || r.status === 'cancelled' ? 'bg-success/15 text-success' : 'bg-error/15 text-error'">
+                  {{ r.status === 'completed' ? 'Completado' : r.status === 'expired' || r.status === 'cancelled' ? 'Finalizado' : 'Forzado' }}
                 </span>
               </td>
             </tr>

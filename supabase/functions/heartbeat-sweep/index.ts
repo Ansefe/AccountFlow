@@ -1,5 +1,6 @@
 // Supabase Edge Function: heartbeat-sweep
-// Releases active rentals when user's heartbeat is stale.
+// OBSERVABILITY ONLY — reports which users have stale heartbeats.
+// Does NOT release rentals. Rental lifecycle is managed by check-rental-matches.
 // Deploy: supabase functions deploy heartbeat-sweep
 //
 // Auth: service role key as Bearer.
@@ -34,14 +35,15 @@ Deno.serve(async (req) => {
   const staleMs = Number.parseInt(Deno.env.get('HEARTBEAT_STALE_MS') || '180000', 10)
   const cutoff = Date.now() - (Number.isFinite(staleMs) ? staleMs : 180000)
 
+  // Get users with active rentals
   const { data: rentals, error: rentalsErr } = await supabase
     .from('rentals')
-    .select('id, user_id, account_id, status, started_at, expires_at')
+    .select('id, user_id, account_id')
     .eq('status', 'active')
 
   if (rentalsErr) return jsonResponse({ error: rentalsErr.message }, 500)
-  const active = (rentals ?? []) as Array<{ id: string; user_id: string; account_id: string; status: string }>
-  if (!active.length) return jsonResponse({ ok: true, released: 0 })
+  const active = (rentals ?? []) as Array<{ id: string; user_id: string; account_id: string }>
+  if (!active.length) return jsonResponse({ ok: true, staleUsers: 0, totalActive: 0 })
 
   const userIds = Array.from(new Set(active.map((r) => r.user_id)))
   const { data: profiles, error: profErr } = await supabase
@@ -51,51 +53,30 @@ Deno.serve(async (req) => {
 
   if (profErr) return jsonResponse({ error: profErr.message }, 500)
 
-  const staleUsers = new Set(
-    (profiles ?? [])
-      .filter((p) => {
-        const raw = (p as any).last_heartbeat_at as string | null
-        if (!raw) return true
-        const t = new Date(raw).getTime()
-        return !Number.isFinite(t) || t <= cutoff
-      })
-      .map((p) => (p as any).id as string)
-  )
-
-  const staleRentals = active.filter((r) => staleUsers.has(r.user_id))
-  if (!staleRentals.length) return jsonResponse({ ok: true, released: 0 })
-
-  const endedAt = new Date().toISOString()
-  let released = 0
-
-  for (const rental of staleRentals) {
-    // Mark rental ended if still active
-    const { data: upd, error: updErr } = await supabase
-      .from('rentals')
-      .update({ status: 'force_released', ended_at: endedAt })
-      .eq('id', rental.id)
-      .eq('status', 'active')
-      .select('id')
-
-    if (updErr) continue
-    if (!upd || upd.length === 0) continue
-
-    // Free the account
-    await supabase
-      .from('accounts')
-      .update({ current_rental_id: null })
-      .eq('id', rental.account_id)
-      .eq('current_rental_id', rental.id)
-
-    // Log
-    await supabase.from('activity_log').insert({
-      user_id: rental.user_id,
-      event_type: 'heartbeat_timeout',
-      metadata: { rental_id: rental.id, account_id: rental.account_id }
+  const staleUsers = (profiles ?? [])
+    .filter((p) => {
+      const raw = (p as any).last_heartbeat_at as string | null
+      if (!raw) return true
+      const t = new Date(raw).getTime()
+      return !Number.isFinite(t) || t <= cutoff
     })
+    .map((p) => (p as any).id as string)
 
-    released += 1
+  // Log stale heartbeats for admin observability (no action taken)
+  for (const userId of staleUsers) {
+    const userRentals = active.filter((r) => r.user_id === userId)
+    for (const rental of userRentals) {
+      await supabase.from('activity_log').insert({
+        user_id: userId,
+        event_type: 'heartbeat_timeout',
+        metadata: {
+          rental_id: rental.id,
+          account_id: rental.account_id,
+          note: 'Observability only — no action taken. Match tracking handles rental lifecycle.'
+        }
+      })
+    }
   }
 
-  return jsonResponse({ ok: true, released })
+  return jsonResponse({ ok: true, staleUsers: staleUsers.length, totalActive: active.length })
 })

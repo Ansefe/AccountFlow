@@ -124,3 +124,16 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
+
+// Kill Riot Client when the app is closing (ensures game stops if app is closed)
+app.on('before-quit', async (event) => {
+  event.preventDefault()
+  try {
+    await killRiotClient()
+  } catch {
+    // best-effort — don't block quit
+  }
+  // Remove listener to prevent infinite loop, then quit
+  app.removeAllListeners('before-quit')
+  app.quit()
+})

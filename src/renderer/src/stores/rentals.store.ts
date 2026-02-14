@@ -1,10 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { supabase } from '@renderer/lib/supabase'
-import type { Rental } from '@renderer/types/database'
+import type { Rental, RentalMatch } from '@renderer/types/database'
 
 export const useRentalsStore = defineStore('rentals', () => {
   const rentals = ref<Rental[]>([])
+  const rentalMatches = ref<Map<string, RentalMatch[]>>(new Map())
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -18,6 +19,8 @@ export const useRentalsStore = defineStore('rentals', () => {
   const pastRentals = computed(() =>
     rentals.value.filter(r => r.status !== 'active')
   )
+
+  // ── Heartbeat (observability only, does NOT release accounts) ──
 
   async function sendHeartbeat(): Promise<void> {
     try {
@@ -58,6 +61,8 @@ export const useRentalsStore = defineStore('rentals', () => {
     else stopHeartbeat()
   }
 
+  // ── Data fetching ──
+
   async function fetchMyRentals(userId: string): Promise<void> {
     loading.value = true
     error.value = null
@@ -73,20 +78,52 @@ export const useRentalsStore = defineStore('rentals', () => {
         return
       }
       rentals.value = (data ?? []) as Rental[]
+
+      // Fetch matches for active rentals
+      const activeIds = rentals.value
+        .filter(r => r.status === 'active' && r.matches_total)
+        .map(r => r.id)
+
+      if (activeIds.length > 0) {
+        await fetchRentalMatches(activeIds)
+      }
+
       syncHeartbeat()
     } finally {
       loading.value = false
     }
   }
 
+  async function fetchRentalMatches(rentalIds: string[]): Promise<void> {
+    const { data } = await supabase
+      .from('rental_matches')
+      .select('*')
+      .in('rental_id', rentalIds)
+      .order('detected_at', { ascending: false })
+
+    if (data) {
+      const matchMap = new Map<string, RentalMatch[]>()
+      for (const m of data as RentalMatch[]) {
+        if (!matchMap.has(m.rental_id)) matchMap.set(m.rental_id, [])
+        matchMap.get(m.rental_id)!.push(m)
+      }
+      rentalMatches.value = matchMap
+    }
+  }
+
+  function getMatchesForRental(rentalId: string): RentalMatch[] {
+    return rentalMatches.value.get(rentalId) ?? []
+  }
+
+  // ── Start a match-based rental ──
+
   async function startRental(
     userId: string,
     accountId: string,
-    durationMinutes: number,
+    matchesTotal: number,
     creditsToSpend: number
   ): Promise<{ error: string | null; rental: Rental | null }> {
     const now = new Date()
-    const expiresAt = new Date(now.getTime() + durationMinutes * 60 * 1000)
 
     const { data, error: err } = await supabase
       .from('rentals')
@@ -94,9 +131,9 @@ export const useRentalsStore = defineStore('rentals', () => {
         user_id: userId,
         account_id: accountId,
         credits_spent: creditsToSpend,
-        duration_minutes: durationMinutes,
+        matches_total: matchesTotal,
+        matches_used: 0,
         started_at: now.toISOString(),
-        expires_at: expiresAt.toISOString(),
         status: 'active'
       })
       .select()
@@ -117,34 +154,7 @@ export const useRentalsStore = defineStore('rentals', () => {
     return { error: null, rental }
   }
 
-  async function checkAndExpireRentals(): Promise<void> {
-    const now = Date.now()
-    const expiredRentals = rentals.value.filter(
-      r => r.status === 'active' && new Date(r.expires_at).getTime() <= now
-    )
-
-    for (const rental of expiredRentals) {
-      const { error: rentalErr } = await supabase
-        .from('rentals')
-        .update({ status: 'expired', ended_at: new Date().toISOString() })
-        .eq('id', rental.id)
-        .eq('status', 'active')
-
-      if (!rentalErr) {
-        await supabase
-          .from('accounts')
-          .update({ current_rental_id: null })
-          .eq('id', rental.account_id)
-
-        const idx = rentals.value.findIndex(r => r.id === rental.id)
-        if (idx !== -1) {
-          rentals.value[idx] = { ...rentals.value[idx], status: 'expired', ended_at: new Date().toISOString() }
-        }
-      }
-    }
-
-    syncHeartbeat()
-  }
+  // ── End rental (manual release by user) ──
 
   async function endRental(rentalId: string, accountId: string): Promise<{ error: string | null }> {
     const { error: err } = await supabase
@@ -173,7 +183,10 @@ export const useRentalsStore = defineStore('rentals', () => {
     return { error: null }
   }
 
+  // ── Realtime subscriptions ──
+
   function subscribeToChanges(userId: string): void {
+    // Listen to rental changes
     supabase
       .channel('my-rentals')
       .on('postgres_changes', {
@@ -193,20 +206,42 @@ export const useRentalsStore = defineStore('rentals', () => {
         syncHeartbeat()
       })
       .subscribe()
+
+    // Listen to rental_matches for live match updates
+    supabase
+      .channel('my-rental-matches')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'rental_matches'
+      }, (payload) => {
+        const newMatch = payload.new as RentalMatch
+        // Only add if it belongs to one of our rentals
+        const belongsToUs = rentals.value.some(r => r.id === newMatch.rental_id)
+        if (!belongsToUs) return
+
+        const existing = rentalMatches.value.get(newMatch.rental_id) ?? []
+        rentalMatches.value.set(newMatch.rental_id, [newMatch, ...existing])
+        // Trigger reactivity
+        rentalMatches.value = new Map(rentalMatches.value)
+      })
+      .subscribe()
   }
 
   watch(activeRentals, () => syncHeartbeat(), { deep: false })
 
   return {
     rentals,
+    rentalMatches,
     loading,
     error,
     activeRentals,
     pastRentals,
     fetchMyRentals,
+    fetchRentalMatches,
+    getMatchesForRental,
     startRental,
     endRental,
-    checkAndExpireRentals,
     subscribeToChanges
   }
 })

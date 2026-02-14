@@ -2,7 +2,7 @@ export type PlanType = 'none' | 'early_bird' | 'basic' | 'unlimited'
 export type UserRole = 'user' | 'admin'
 export type AccountStatus = 'active' | 'inactive' | 'semi_active'
 export type BanType = 'permanent' | 'normals_required' | null
-export type RentalStatus = 'active' | 'expired' | 'cancelled' | 'force_released'
+export type RentalStatus = 'active' | 'expired' | 'cancelled' | 'force_released' | 'completed'
 export type CreditBalanceType = 'subscription' | 'purchased'
 export type CreditTransactionType =
   | 'subscription_grant'
@@ -26,6 +26,9 @@ export type ActivityEventType =
   | 'account_login_launched'
   | 'app_closed'
   | 'heartbeat_timeout'
+  | 'match_detected'
+  | 'idle_timeout'
+  | 'rental_completed'
   | 'admin_action'
 
 export type Elo =
@@ -101,11 +104,23 @@ export interface Rental {
   user_id: string
   account_id: string
   credits_spent: number
-  duration_minutes: number
+  matches_total: number
+  matches_used: number
+  last_match_at: string | null
   started_at: string
-  expires_at: string
   ended_at: string | null
   status: RentalStatus
+}
+
+export interface RentalMatch {
+  id: string
+  rental_id: string
+  match_id: string
+  game_mode: string | null
+  champion: string | null
+  win: boolean | null
+  duration_secs: number | null
+  detected_at: string
 }
 
 export interface CreditTransaction {
