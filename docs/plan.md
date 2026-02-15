@@ -695,5 +695,52 @@ Breakeven: literalmente el primer pago de $10 de un amigo ya genera ingreso neto
 - [ ] NOWPayments para crypto automatizado (si escala)
 - [ ] Landing page + distribución pública
 - [ ] Sistema de referidos
+- [ ] Segregación de cuentas por país (ver sección 19)
+
+---
+
+## 19. Segregación de Cuentas por País (Pendiente)
+
+**Objetivo:** Evitar bans por uso de cuentas desde países distintos al de creación.
+
+**Problema:** Riot detecta anomalías de IP y puede banear cuentas que se usan desde
+regiones geográficas muy distintas a su origen habitual.
+
+**Dato clave:** La API de Riot **no expone el país de creación** de una cuenta. Lo más
+granular disponible es el `server` (NA, LAN, LAS, EUW, etc.), que ya almacenamos.
+
+**Diseño propuesto:**
+
+1. **Campo `country` en `profiles`** — Cada usuario indica su país al registrarse o
+   desde su perfil (selector de país). Campo obligatorio para poder alquilar.
+
+2. **Campo `allowed_countries` (o server implícito) en `accounts`** — Cada cuenta
+   tiene su server; el admin puede opcionalmente marcar países específicos permitidos.
+
+3. **Mapeo `country → servers_compatibles`** — Tabla o constante que define qué países
+   pueden usar qué servers:
+   - México → LAN, NA
+   - Colombia → LAN
+   - Argentina → LAS
+   - España → EUW
+   - etc.
+
+4. **Filtrado en catálogo** — Al listar cuentas disponibles, solo mostrar las que
+   coincidan con los servers compatibles del país del usuario.
+
+5. **Validación en backend** — El RPC / Edge Function de alquiler valida la
+   compatibilidad país ↔ server antes de aprobar.
+
+**Migración necesaria:**
+```sql
+ALTER TABLE profiles ADD COLUMN country TEXT;
+CREATE TABLE country_server_map (
+  country TEXT NOT NULL,
+  server server_region NOT NULL,
+  PRIMARY KEY (country, server)
+);
+```
+
+**Estado:** Pendiente de definir la tabla de mapeo exacta y refinar la UX.
 
 ---

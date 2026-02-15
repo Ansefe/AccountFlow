@@ -41,7 +41,7 @@ async function handleRegister(): Promise<void> {
     return
   }
 
-  successMsg.value = 'Cuenta creada. Revisa tu correo para confirmar tu cuenta.'
+  successMsg.value = '¡Cuenta creada exitosamente!'
 }
 
 async function handleDiscordLogin(): Promise<void> {

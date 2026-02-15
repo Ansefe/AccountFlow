@@ -77,26 +77,30 @@ async function reportLoginError(rawError: string, code: string): Promise<void> {
   }
 }
 
-const activeRental = computed(() => rentalsStore.activeRentals[0] ?? null)
-const activeAccount = computed(() => {
-  if (!activeRental.value) return null
-  return accountsStore.accounts.find(a => a.id === activeRental.value!.account_id) ?? null
-})
+const loginRentalId = ref<string | null>(null)
+const releasingRentalId = ref<string | null>(null)
 
-const matchProgress = computed(() => {
-  if (!activeRental.value) return '0 / 0'
-  return `${activeRental.value.matches_used} / ${activeRental.value.matches_total}`
-})
+const activeRentalsWithAccounts = computed(() =>
+  rentalsStore.activeRentals
+    .map(rental => ({
+      rental,
+      account: accountsStore.accounts.find(a => a.id === rental.account_id) ?? null
+    }))
+    .filter(item => item.account !== null) as { rental: typeof rentalsStore.activeRentals[number]; account: NonNullable<ReturnType<typeof accountsStore.accounts.find>> }[]
+)
 
-const progressPercent = computed(() => {
-  if (!activeRental.value) return 0
-  const total = activeRental.value.matches_total ?? 1
-  return Math.min(100, Math.max(0, (activeRental.value.matches_used / total) * 100))
-})
+function getMatchProgress(rental: { matches_used: number; matches_total: number }) {
+  return `${rental.matches_used} / ${rental.matches_total}`
+}
+
+function getProgressPercent(rental: { matches_used: number; matches_total: number }) {
+  const total = rental.matches_total ?? 1
+  return Math.min(100, Math.max(0, (rental.matches_used / total) * 100))
+}
 
 /** Auto-login via Riot Client local API (credentials fetched in Main Process) */
-async function handleLogin(): Promise<void> {
-  if (!activeRental.value) return
+async function handleLogin(rental: { id: string }): Promise<void> {
+  loginRentalId.value = rental.id
   loginLoading.value = true
   loginError.value = ''
   loginSuccess.value = false
@@ -117,7 +121,7 @@ async function handleLogin(): Promise<void> {
 
     // Send to Main Process — credentials are fetched server-side, never in renderer
     const result = await window.api.riot.login({
-      rentalId: activeRental.value.id,
+      rentalId: rental.id,
       supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
       anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
       accessToken: session.access_token,
@@ -157,12 +161,15 @@ async function handleKillClient(): Promise<void> {
   }
 }
 
-async function handleRelease(): Promise<void> {
-  if (!activeRental.value) return
-  // Kill Riot Client when releasing the account
-  await window.api.riot.kill()
-  await rentalsStore.endRental(activeRental.value.id, activeRental.value.account_id)
-  await accountsStore.fetchAccounts()
+async function handleRelease(rental: { id: string; account_id: string }): Promise<void> {
+  releasingRentalId.value = rental.id
+  try {
+    await window.api.riot.kill()
+    await rentalsStore.endRental(rental.id, rental.account_id)
+    await accountsStore.fetchAccounts()
+  } finally {
+    releasingRentalId.value = null
+  }
 }
 
 onMounted(async () => {
@@ -201,69 +208,80 @@ onUnmounted(() => {
 
     <!-- Active Tab -->
     <template v-if="tab === 'active'">
-      <div v-if="activeRental && activeAccount" class="rounded-xl bg-surface border border-accent/30 p-6 max-w-2xl">
-        <div class="flex items-center justify-between mb-4">
-          <div>
-            <h3 class="text-lg font-bold text-text-primary">{{ activeAccount.name }}</h3>
-            <div class="flex items-center gap-2 mt-1">
-              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-accent/15 text-accent">{{ activeAccount.elo }} {{ activeAccount.elo_division || '' }}</span>
-              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-bg-primary text-text-secondary border border-border-default">{{ activeAccount.server }}</span>
-            </div>
-          </div>
-          <Gamepad2 class="w-5 h-5 text-accent" />
-        </div>
-
-        <div class="text-center py-6">
-          <div class="text-5xl font-bold font-mono text-text-primary tracking-wider">{{ matchProgress }}</div>
-          <div class="text-sm text-text-secondary mt-1">partidas jugadas</div>
-        </div>
-
-        <div class="w-full h-1.5 rounded-full bg-bg-primary mb-6">
-          <div class="h-full rounded-full bg-accent transition-all" :style="{ width: progressPercent + '%' }"></div>
-        </div>
-
-        <!-- Login status messages -->
-        <div v-if="loginError" class="flex items-start gap-2 mb-4 px-3 py-2 rounded-lg bg-error/10 border border-error/20">
-          <AlertTriangle class="w-4 h-4 text-error shrink-0" />
-          <pre class="text-xs text-error whitespace-pre-wrap wrap-break-word min-w-0 max-h-40 overflow-auto">{{ loginError }}</pre>
-        </div>
-        <div v-else-if="loginLoading && loginProgress" class="mb-4 px-3 py-2 rounded-lg bg-accent/10 border border-accent/20">
-          <span class="text-xs text-accent">{{ loginProgress }}</span>
-        </div>
-        <div v-if="loginSuccess" class="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-success/10 border border-success/20">
-          <Play class="w-4 h-4 text-success shrink-0" />
-          <span class="text-xs text-success">Credenciales enviadas al Riot Client. ¡Listo para jugar!</span>
-        </div>
-
-        <div class="grid grid-cols-3 gap-3">
-          <button
-            class="h-11 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
-            :class="loginLoading
-              ? 'bg-accent/30 text-white/50 cursor-wait'
-              : 'bg-accent hover:bg-accent/90 text-white'"
-            :disabled="loginLoading"
-            @click="handleLogin"
-          >
-            <Loader2 v-if="loginLoading" class="w-4 h-4 animate-spin" />
-            <Play v-else class="w-4 h-4" />
-            {{ loginLoading ? 'Conectando...' : 'Iniciar Sesión' }}
-          </button>
-          <button
-            class="h-11 rounded-lg bg-surface hover:bg-surface-hover border border-border-default text-sm font-semibold text-text-secondary flex items-center justify-center gap-2 transition-colors"
-            :disabled="killingClient"
-            @click="handleKillClient"
-          >
-            <Square class="w-3.5 h-3.5" />
-            Cerrar Cliente
-          </button>
-          <button class="h-11 rounded-lg bg-error/15 hover:bg-error/25 border border-error/30 text-sm font-semibold text-error flex items-center justify-center gap-2 transition-colors" @click="handleRelease">
-            <Unlock class="w-4 h-4" />
-            Liberar Cuenta
-          </button>
-        </div>
-      </div>
-      <div v-else class="rounded-xl bg-surface border border-border-default p-12 text-center max-w-2xl">
+      <div v-if="activeRentalsWithAccounts.length === 0" class="rounded-xl bg-surface border border-border-default p-12 text-center max-w-2xl">
         <div class="text-sm text-text-muted">No tienes alquileres activos</div>
+      </div>
+      <div v-else class="space-y-4">
+        <div v-for="{ rental, account } in activeRentalsWithAccounts" :key="rental.id" class="rounded-xl bg-surface border border-accent/30 p-6 max-w-2xl">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="text-lg font-bold text-text-primary">{{ account.name }}</h3>
+              <div class="flex items-center gap-2 mt-1">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-accent/15 text-accent">{{ account.elo }} {{ account.elo_division || '' }}</span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-bg-primary text-text-secondary border border-border-default">{{ account.server }}</span>
+              </div>
+            </div>
+            <Gamepad2 class="w-5 h-5 text-accent" />
+          </div>
+
+          <div class="text-center py-6">
+            <div class="text-5xl font-bold font-mono text-text-primary tracking-wider">{{ getMatchProgress(rental) }}</div>
+            <div class="text-sm text-text-secondary mt-1">partidas jugadas</div>
+          </div>
+
+          <div class="w-full h-1.5 rounded-full bg-bg-primary mb-6">
+            <div class="h-full rounded-full bg-accent transition-all" :style="{ width: getProgressPercent(rental) + '%' }"></div>
+          </div>
+
+          <!-- Login status messages (only for the rental being logged in) -->
+          <template v-if="loginRentalId === rental.id">
+            <div v-if="loginError" class="flex items-start gap-2 mb-4 px-3 py-2 rounded-lg bg-error/10 border border-error/20">
+              <AlertTriangle class="w-4 h-4 text-error shrink-0" />
+              <pre class="text-xs text-error whitespace-pre-wrap wrap-break-word min-w-0 max-h-40 overflow-auto">{{ loginError }}</pre>
+            </div>
+            <div v-else-if="loginLoading && loginProgress" class="mb-4 px-3 py-2 rounded-lg bg-accent/10 border border-accent/20">
+              <span class="text-xs text-accent">{{ loginProgress }}</span>
+            </div>
+            <div v-if="loginSuccess" class="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-success/10 border border-success/20">
+              <Play class="w-4 h-4 text-success shrink-0" />
+              <span class="text-xs text-success">Credenciales enviadas al Riot Client. ¡Listo para jugar!</span>
+            </div>
+          </template>
+
+          <div class="grid grid-cols-3 gap-3">
+            <button
+              class="h-11 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
+              :class="loginLoading && loginRentalId === rental.id
+                ? 'bg-accent/30 text-white/50 cursor-wait'
+                : loginLoading
+                  ? 'bg-accent/20 text-white/30 cursor-not-allowed'
+                  : 'bg-accent hover:bg-accent/90 text-white'"
+              :disabled="loginLoading"
+              @click="handleLogin(rental)"
+            >
+              <Loader2 v-if="loginLoading && loginRentalId === rental.id" class="w-4 h-4 animate-spin" />
+              <Play v-else class="w-4 h-4" />
+              {{ loginLoading && loginRentalId === rental.id ? 'Conectando...' : 'Iniciar Sesión' }}
+            </button>
+            <button
+              class="h-11 rounded-lg bg-surface hover:bg-surface-hover border border-border-default text-sm font-semibold text-text-secondary flex items-center justify-center gap-2 transition-colors"
+              :disabled="killingClient"
+              @click="handleKillClient"
+            >
+              <Square class="w-3.5 h-3.5" />
+              Cerrar Cliente
+            </button>
+            <button
+              class="h-11 rounded-lg bg-error/15 hover:bg-error/25 border border-error/30 text-sm font-semibold text-error flex items-center justify-center gap-2 transition-colors"
+              :disabled="releasingRentalId === rental.id"
+              @click="handleRelease(rental)"
+            >
+              <Loader2 v-if="releasingRentalId === rental.id" class="w-4 h-4 animate-spin" />
+              <Unlock v-else class="w-4 h-4" />
+              Liberar Cuenta
+            </button>
+          </div>
+        </div>
       </div>
     </template>
 

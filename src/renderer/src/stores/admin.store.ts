@@ -110,6 +110,60 @@ export const useAdminStore = defineStore('admin', () => {
     return { error: null }
   }
 
+  /** Bulk create accounts from parsed CSV rows. Returns per-row results. */
+  async function bulkCreateAccounts(
+    rows: {
+      name: string
+      riot_username: string
+      riot_tag: string
+      login_username: string
+      password: string
+      server: string
+      elo: string
+      elo_division: number | null
+      lp: number
+      status: string
+      notes: string | null
+    }[],
+    onProgress?: (done: number, total: number) => void
+  ): Promise<{ created: number; failed: { row: number; error: string }[] }> {
+    let created = 0
+    const failed: { row: number; error: string }[] = []
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]
+      const { error } = await createAccount({
+        name: row.name,
+        riot_username: row.riot_username,
+        riot_tag: row.riot_tag,
+        login_username: row.login_username,
+        encrypted_password: row.password,
+        server: row.server,
+        elo: row.elo,
+        elo_division: row.elo_division,
+        lp: row.lp,
+        status: row.status,
+        notes: row.notes
+      })
+
+      if (error) {
+        failed.push({ row: i + 1, error })
+      } else {
+        created++
+      }
+
+      onProgress?.(i + 1, rows.length)
+      // Small delay between requests to avoid rate limiting
+      if (i < rows.length - 1) {
+        await new Promise(r => setTimeout(r, 300))
+      }
+    }
+
+    // Refresh list once at the end
+    await fetchAllAccounts()
+    return { created, failed }
+  }
+
   async function forceReleaseAccount(accountId: string, rentalId: string): Promise<{ error: string | null }> {
     const { error: rentalErr } = await supabase
       .from('rentals')
@@ -206,6 +260,7 @@ export const useAdminStore = defineStore('admin', () => {
     createAccount,
     updateAccount,
     deleteAccount,
+    bulkCreateAccounts,
     forceReleaseAccount,
     resolvePuuids,
     fetchAllUsers,

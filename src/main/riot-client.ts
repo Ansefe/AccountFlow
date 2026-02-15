@@ -16,8 +16,8 @@
  */
 
 import { execSync, spawn } from 'child_process'
-import { existsSync, readFileSync, unlinkSync } from 'fs'
-import { dirname, join } from 'path'
+import { existsSync, readFileSync, unlinkSync, rmSync, readdirSync } from 'fs'
+import { dirname, join, resolve as pathResolve } from 'path'
 import https from 'https'
 
 // ---------------------------------------------------------------------------
@@ -36,6 +36,71 @@ const LOL_PROCESSES = [
   'LeagueClientUxRender.exe',
   'League of Legends.exe'
 ]
+
+// ---------------------------------------------------------------------------
+// League Logs deletion — security measure
+// ---------------------------------------------------------------------------
+
+/**
+ * Get candidate paths for the League of Legends "Logs" folder.
+ * We derive them from:
+ *   (a) The Riot Client path (e.g. C:\Riot Games\Riot Client\RiotClientServices.exe
+ *       → C:\Riot Games\League of Legends\Logs)
+ *   (b) Common default install locations
+ */
+function getLeagueLogsPaths(riotClientExePath?: string): string[] {
+  const candidates: string[] = []
+
+  // Derive from Riot Client executable path
+  if (riotClientExePath) {
+    try {
+      // riotClientExePath = C:\Riot Games\Riot Client\RiotClientServices.exe
+      // riotGamesRoot    = C:\Riot Games
+      const riotGamesRoot = dirname(dirname(pathResolve(riotClientExePath)))
+      candidates.push(join(riotGamesRoot, 'League of Legends', 'Logs'))
+    } catch { /* ignore */ }
+  }
+
+  // Common default paths
+  candidates.push('C:\\Riot Games\\League of Legends\\Logs')
+  candidates.push('D:\\Riot Games\\League of Legends\\Logs')
+
+  // Deduplicate (case-insensitive on Windows)
+  const seen = new Set<string>()
+  return candidates.filter((p) => {
+    const key = p.toLowerCase()
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+/**
+ * Delete the League of Legends "Logs" folder if it exists.
+ * This is a security measure to prevent log-based account tracking.
+ * Silently succeeds if the folder doesn't exist or can't be deleted.
+ */
+function deleteLeagueLogsFolder(riotClientExePath?: string): {
+  deleted: boolean
+  path?: string
+  error?: string
+} {
+  const paths = getLeagueLogsPaths(riotClientExePath)
+  for (const logsPath of paths) {
+    try {
+      if (existsSync(logsPath)) {
+        rmSync(logsPath, { recursive: true, force: true })
+        console.log(`[AutoLogin] Deleted League Logs folder: ${logsPath}`)
+        return { deleted: true, path: logsPath }
+      }
+    } catch (err) {
+      console.warn(`[AutoLogin] Could not delete Logs folder (${logsPath}):`, err)
+      return { deleted: false, path: logsPath, error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+  // No Logs folder found — that's fine
+  return { deleted: false }
+}
 
 function getLockfileCandidatePaths(): string[] {
   const localAppData =
@@ -714,6 +779,15 @@ export async function loginToRiotClient(params: {
     // Remove stale lockfile
     deleteLockfile()
     await sleep(500)
+
+    // ── 2.5 Delete League of Legends Logs folder (security) ──
+    progress('Eliminando carpeta de Logs de LoL')
+    const logsResult = deleteLeagueLogsFolder(riotClientPath)
+    if (logsResult.deleted) {
+      progress(`Logs eliminados: ${logsResult.path}`)
+    } else if (logsResult.error) {
+      progress(`Advertencia: no se pudieron eliminar Logs: ${logsResult.error}`)
+    }
 
     // ── 3. Launch Riot Client ──
     if (!existsSync(riotClientPath)) {
