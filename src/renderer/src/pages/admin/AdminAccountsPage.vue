@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { Plus, RefreshCw, Pencil, Trash2, Unlock, Search, Loader2, Zap } from 'lucide-vue-next'
 import { useAdminStore } from '@renderer/stores/admin.store'
 
@@ -29,7 +29,16 @@ const form = ref({
 })
 
 const servers = ['NA', 'EUW', 'EUNE', 'LAN', 'LAS', 'BR', 'KR', 'JP', 'OCE', 'TR', 'RU']
-const elos = ['Iron', 'Bronze', 'Silver', 'Gold', 'Platinum', 'Emerald', 'Diamond', 'Master', 'Grandmaster', 'Challenger']
+const elos = ['Unranked', 'Iron', 'Bronze', 'Silver', 'Gold', 'Platinum', 'Emerald', 'Diamond', 'Master', 'Grandmaster', 'Challenger']
+const noDivisionElos = new Set(['Unranked', 'Master', 'Grandmaster', 'Challenger'])
+
+// Auto-clear division & LP when selecting an elo that doesn't use them
+watch(() => form.value.elo, (elo) => {
+  if (noDivisionElos.has(elo)) {
+    form.value.elo_division = null
+    form.value.lp = 0
+  }
+})
 
 function resetForm(): void {
   form.value = { name: '', riot_username: '', riot_tag: '', login_username: '', encrypted_password: '', server: 'LAN', elo: 'Iron', elo_division: 4, lp: 0, status: 'active', notes: '' }

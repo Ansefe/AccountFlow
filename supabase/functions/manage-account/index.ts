@@ -3,15 +3,27 @@
 // Deploy: supabase functions deploy manage-account --no-verify-jwt
 //
 // POST   → Create account (encrypts password, resolves PUUID from Riot API)
-// PUT    → Update account (re-encrypts password if provided, re-resolves PUUID if riot_username/riot_tag changed)
-// DELETE → Delete account
+//           action: 'resolve-puuids' → Bulk resolve missing PUUIDs
+//           action: 'delete'         → Delete account (CORS-safe)
+//           action: 'update'         → Update account (CORS-safe)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const ENCRYPTION_KEY = Deno.env.get('ENCRYPTION_KEY')!
-const riotApiKey = Deno.env.get('RIOT_API_KEY') || ''
+
+// Riot API key rotation: supports RIOT_API_KEYS (comma-separated) or single RIOT_API_KEY
+const riotApiKeys: string[] = (
+  Deno.env.get('RIOT_API_KEYS') || Deno.env.get('RIOT_API_KEY') || ''
+).split(',').map(k => k.trim()).filter(Boolean)
+let riotKeyIndex = 0
+function nextRiotKey(): string {
+  if (!riotApiKeys.length) return ''
+  const key = riotApiKeys[riotKeyIndex % riotApiKeys.length]
+  riotKeyIndex++
+  return key
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -50,19 +62,14 @@ function jsonResponse(data: unknown, status = 200): Response {
 }
 
 /** Resolve PUUID from Riot Account API using gameName + tagLine */
-async function resolvePuuid(gameName: string, tagLine: string, server: string): Promise<string | null> {
-  if (!riotApiKey) return null
-  // Route to correct regional endpoint
-  const regionMap: Record<string, string> = {
-    NA: 'americas', LAN: 'americas', LAS: 'americas', BR: 'americas', OCE: 'americas',
-    EUW: 'europe', EUNE: 'europe', TR: 'europe', RU: 'europe',
-    KR: 'asia', JP: 'asia',
-    PH: 'sea', SG: 'sea', TW: 'sea', TH: 'sea', VN: 'sea'
-  }
-  const region = regionMap[server] || 'americas'
-  const url = `https://${region}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`
+async function resolvePuuid(gameName: string, tagLine: string, _server?: string): Promise<string | null> {
+  if (!riotApiKeys.length) return null
+  // Account API v1 (by-riot-id) is global – Riot IDs are unique across all
+  // shards, so we always use the 'americas' routing which works for every
+  // account regardless of their game server.
+  const url = `https://americas.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`
   try {
-    const res = await fetch(url, { headers: { 'X-Riot-Token': riotApiKey } })
+    const res = await fetch(url, { headers: { 'X-Riot-Token': nextRiotKey() } })
     if (!res.ok) {
       console.error(`Riot API ${res.status} resolving puuid for ${gameName}#${tagLine}`)
       return null
@@ -116,6 +123,20 @@ Deno.serve(async (req) => {
     if (req.method === 'POST') {
       const body = await req.json()
 
+      // ── Delete account (via POST to avoid CORS issues with DELETE method) ──
+      if (body.action === 'delete') {
+        const { id } = body
+        if (!id) return jsonResponse({ error: 'id is required' }, 400)
+
+        const { error } = await supabase
+          .from('accounts')
+          .delete()
+          .eq('id', id)
+
+        if (error) return jsonResponse({ error: error.message }, 500)
+        return jsonResponse({ success: true })
+      }
+
       // ── Bulk resolve PUUIDs for all accounts missing puuid ──
       if (body.action === 'resolve-puuids') {
         const { data: accounts, error: fetchErr } = await supabase
@@ -141,6 +162,112 @@ Deno.serve(async (req) => {
         }
 
         return jsonResponse({ success: true, resolved, failed, total: (accounts ?? []).length })
+      }
+
+      // ── Update account (via POST to avoid CORS issues with PUT method) ──
+      if (body.action === 'update') {
+        const { id, password, login_username, ...updates } = body
+        // Remove action field from updates
+        delete updates.action
+
+        if (!id) return jsonResponse({ error: 'id is required' }, 400)
+
+        // If password provided, encrypt it
+        if (password && password.trim() !== '') {
+          const encrypted = await encryptPassword(password)
+          updates.encrypted_password = encrypted
+
+          const trimmedLogin = typeof login_username === 'string' ? login_username.trim() : ''
+
+          // If caller didn't provide login_username, try to reuse existing one.
+          let effectiveLogin = trimmedLogin
+          if (!effectiveLogin) {
+            const { data: existingCred } = await supabase
+              .from('account_credentials')
+              .select('login_username')
+              .eq('account_id', id)
+              .maybeSingle()
+            if (existingCred?.login_username) effectiveLogin = existingCred.login_username
+          }
+
+          if (!effectiveLogin) {
+            return jsonResponse({ error: 'login_username is required when setting a password (or the account must already have credentials)' }, 400)
+          }
+
+          // Mirror into account_credentials.
+          const { error: credPassErr } = await supabase
+            .from('account_credentials')
+            .upsert(
+              {
+                account_id: id,
+                login_username: effectiveLogin,
+                encrypted_password: encrypted
+              },
+              { onConflict: 'account_id' }
+            )
+          if (credPassErr) return jsonResponse({ error: credPassErr.message }, 500)
+        } else if (typeof login_username === 'string' && login_username.trim() !== '') {
+          const nextLogin = login_username.trim()
+
+          // Update if row exists...
+          const { data: updatedRows, error: updErr } = await supabase
+            .from('account_credentials')
+            .update({ login_username: nextLogin })
+            .eq('account_id', id)
+            .select('account_id')
+
+          if (updErr) return jsonResponse({ error: updErr.message }, 500)
+
+          // ...otherwise create it by copying the legacy encrypted_password.
+          if (!updatedRows || updatedRows.length === 0) {
+            const { data: accRow, error: accErr } = await supabase
+              .from('accounts')
+              .select('encrypted_password')
+              .eq('id', id)
+              .single()
+            if (accErr) return jsonResponse({ error: accErr.message }, 500)
+
+            const { error: insertErr } = await supabase
+              .from('account_credentials')
+              .insert({
+                account_id: id,
+                login_username: nextLogin,
+                encrypted_password: accRow.encrypted_password
+              })
+            if (insertErr) return jsonResponse({ error: insertErr.message }, 500)
+          }
+        }
+
+        // Remove fields that shouldn't be updated directly
+        delete updates.id
+        delete updates.created_at
+        delete updates.updated_at
+
+        // Re-resolve PUUID if riot_username or riot_tag changed
+        if (updates.riot_username || updates.riot_tag) {
+          const { data: current } = await supabase
+            .from('accounts')
+            .select('riot_username, riot_tag, server')
+            .eq('id', id)
+            .single()
+          const gameName = (updates.riot_username as string) || current?.riot_username || ''
+          const tagLine = (updates.riot_tag as string) || current?.riot_tag || ''
+          const srv = (updates.server as string) || current?.server || 'LAN'
+          if (gameName && tagLine) {
+            const puuid = await resolvePuuid(gameName, tagLine, srv)
+            if (puuid) updates.puuid = puuid
+          }
+        }
+
+        const { data, error } = await supabase
+          .from('accounts')
+          .update(updates)
+          .eq('id', id)
+          .select('id, name, riot_username, riot_tag, server, elo, elo_division, lp, status, is_banned, ban_type, current_rental_id, notes, created_at, updated_at')
+          .single()
+
+        if (error) return jsonResponse({ error: error.message }, 500)
+        return jsonResponse({ success: true, account: data })
       }
 
       // ── Regular CREATE ──
@@ -201,127 +328,6 @@ Deno.serve(async (req) => {
 
       if (credErr) return jsonResponse({ error: credErr.message }, 500)
       return jsonResponse({ success: true, account: data })
-    }
-
-    // ─── UPDATE ───
-    if (req.method === 'PUT') {
-      const body = await req.json()
-      const { id, password, login_username, ...updates } = body
-
-      if (!id) return jsonResponse({ error: 'id is required' }, 400)
-
-      // If password provided, encrypt it
-      if (password && password.trim() !== '') {
-        const encrypted = await encryptPassword(password)
-        updates.encrypted_password = encrypted
-
-        const trimmedLogin = typeof login_username === 'string' ? login_username.trim() : ''
-
-        // If caller didn't provide login_username, try to reuse existing one.
-        let effectiveLogin = trimmedLogin
-        if (!effectiveLogin) {
-          const { data: existingCred } = await supabase
-            .from('account_credentials')
-            .select('login_username')
-            .eq('account_id', id)
-            .maybeSingle()
-          if (existingCred?.login_username) effectiveLogin = existingCred.login_username
-        }
-
-        if (!effectiveLogin) {
-          return jsonResponse({ error: 'login_username is required when setting a password (or the account must already have credentials)' }, 400)
-        }
-
-        // Mirror into account_credentials.
-        const { error: credPassErr } = await supabase
-          .from('account_credentials')
-          .upsert(
-            {
-              account_id: id,
-              login_username: effectiveLogin,
-              encrypted_password: encrypted
-            },
-            { onConflict: 'account_id' }
-          )
-        if (credPassErr) return jsonResponse({ error: credPassErr.message }, 500)
-      } else if (typeof login_username === 'string' && login_username.trim() !== '') {
-        const nextLogin = login_username.trim()
-
-        // Update if row exists...
-        const { data: updatedRows, error: updErr } = await supabase
-          .from('account_credentials')
-          .update({ login_username: nextLogin })
-          .eq('account_id', id)
-          .select('account_id')
-
-        if (updErr) return jsonResponse({ error: updErr.message }, 500)
-
-        // ...otherwise create it by copying the legacy encrypted_password.
-        if (!updatedRows || updatedRows.length === 0) {
-          const { data: accRow, error: accErr } = await supabase
-            .from('accounts')
-            .select('encrypted_password')
-            .eq('id', id)
-            .single()
-          if (accErr) return jsonResponse({ error: accErr.message }, 500)
-
-          const { error: insertErr } = await supabase
-            .from('account_credentials')
-            .insert({
-              account_id: id,
-              login_username: nextLogin,
-              encrypted_password: accRow.encrypted_password
-            })
-          if (insertErr) return jsonResponse({ error: insertErr.message }, 500)
-        }
-      }
-
-      // Remove fields that shouldn't be updated directly
-      delete updates.id
-      delete updates.created_at
-      delete updates.updated_at
-
-      // Re-resolve PUUID if riot_username or riot_tag changed
-      if (updates.riot_username || updates.riot_tag) {
-        const { data: current } = await supabase
-          .from('accounts')
-          .select('riot_username, riot_tag, server')
-          .eq('id', id)
-          .single()
-        const gameName = (updates.riot_username as string) || current?.riot_username || ''
-        const tagLine = (updates.riot_tag as string) || current?.riot_tag || ''
-        const srv = (updates.server as string) || current?.server || 'LAN'
-        if (gameName && tagLine) {
-          const puuid = await resolvePuuid(gameName, tagLine, srv)
-          if (puuid) updates.puuid = puuid
-        }
-      }
-
-      const { data, error } = await supabase
-        .from('accounts')
-        .update(updates)
-        .eq('id', id)
-        .select('id, name, riot_username, riot_tag, server, elo, elo_division, lp, status, is_banned, ban_type, current_rental_id, notes, created_at, updated_at')
-        .single()
-
-      if (error) return jsonResponse({ error: error.message }, 500)
-      return jsonResponse({ success: true, account: data })
-    }
-
-    // ─── DELETE ───
-    if (req.method === 'DELETE') {
-      const body = await req.json()
-      const { id } = body
-
-      if (!id) return jsonResponse({ error: 'id is required' }, 400)
-
-      const { error } = await supabase
-        .from('accounts')
-        .delete()
-        .eq('id', id)
-
-      if (error) return jsonResponse({ error: error.message }, 500)
-      return jsonResponse({ success: true })
     }
 
     return jsonResponse({ error: 'Method not allowed' }, 405)

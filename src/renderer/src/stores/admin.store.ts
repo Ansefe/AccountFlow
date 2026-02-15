@@ -74,8 +74,9 @@ export const useAdminStore = defineStore('admin', () => {
   async function updateAccount(id: string, updates: Partial<Account> & { encrypted_password?: string }): Promise<{ error: string | null }> {
     const anyUpdates = updates as Partial<Account> & { encrypted_password?: string; login_username?: string }
     const { data, error } = await supabase.functions.invoke('manage-account', {
-      method: 'PUT',
+      method: 'POST',
       body: JSON.stringify({
+        action: 'update',
         id,
         login_username: anyUpdates.login_username,
         password: anyUpdates.encrypted_password || undefined,
@@ -99,8 +100,8 @@ export const useAdminStore = defineStore('admin', () => {
 
   async function deleteAccount(id: string): Promise<{ error: string | null }> {
     const { data, error } = await supabase.functions.invoke('manage-account', {
-      method: 'DELETE',
-      body: JSON.stringify({ id }),
+      method: 'POST',
+      body: JSON.stringify({ action: 'delete', id }),
       headers: { 'Content-Type': 'application/json' }
     })
     if (error) return { error: error.message }
@@ -184,6 +185,18 @@ export const useAdminStore = defineStore('admin', () => {
     loading.value = false
   }
 
+  async function deleteUser(userId: string): Promise<{ error: string | null }> {
+    const { data, error } = await supabase.functions.invoke('admin-manage-users', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'delete', userId }),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    if (error) return { error: error.message }
+    if (data?.error) return { error: data.error }
+    users.value = users.value.filter(u => u.id !== userId)
+    return { error: null }
+  }
+
   return {
     accounts,
     users,
@@ -198,6 +211,7 @@ export const useAdminStore = defineStore('admin', () => {
     fetchAllUsers,
     adjustCredits,
     updateUserPlan,
+    deleteUser,
     fetchActivityLogs
   }
 })

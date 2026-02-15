@@ -7,14 +7,25 @@
 // Auth:   service role key OR CRON_SECRET as Bearer.
 //
 // Required env vars:
-//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, RIOT_API_KEY, CRON_SECRET
+//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, RIOT_API_KEYS (or RIOT_API_KEY), CRON_SECRET
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const riotApiKey = Deno.env.get('RIOT_API_KEY') || ''
 const cronSecret = Deno.env.get('CRON_SECRET')
+
+// Riot API key rotation: supports RIOT_API_KEYS (comma-separated) or single RIOT_API_KEY
+const riotApiKeys: string[] = (
+  Deno.env.get('RIOT_API_KEYS') || Deno.env.get('RIOT_API_KEY') || ''
+).split(',').map(k => k.trim()).filter(Boolean)
+let riotKeyIndex = 0
+function nextRiotKey(): string {
+  if (!riotApiKeys.length) return ''
+  const key = riotApiKeys[riotKeyIndex % riotApiKeys.length]
+  riotKeyIndex++
+  return key
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -58,7 +69,7 @@ async function fetchMatchIds(
 ): Promise<string[]> {
   const url = `https://${region}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?startTime=${startTimeEpochSec}&count=${count}`
   const res = await fetch(url, {
-    headers: { 'X-Riot-Token': riotApiKey }
+    headers: { 'X-Riot-Token': nextRiotKey() }
   })
   if (!res.ok) {
     console.error(`Riot matchIds error ${res.status}: ${await res.text()}`)
@@ -71,7 +82,7 @@ async function fetchMatchIds(
 async function fetchMatchDetail(matchId: string, region: string): Promise<MatchInfo | null> {
   const url = `https://${region}.api.riotgames.com/lol/match/v5/matches/${matchId}`
   const res = await fetch(url, {
-    headers: { 'X-Riot-Token': riotApiKey }
+    headers: { 'X-Riot-Token': nextRiotKey() }
   })
   if (!res.ok) {
     console.error(`Riot matchDetail error ${res.status} for ${matchId}`)
@@ -98,7 +109,7 @@ async function fetchMatchDetailForPuuid(
 ): Promise<MatchInfo | null> {
   const url = `https://${region}.api.riotgames.com/lol/match/v5/matches/${matchId}`
   const res = await fetch(url, {
-    headers: { 'X-Riot-Token': riotApiKey }
+    headers: { 'X-Riot-Token': nextRiotKey() }
   })
   if (!res.ok) {
     console.error(`Riot matchDetail error ${res.status} for ${matchId}`)
@@ -129,7 +140,7 @@ Deno.serve(async (req) => {
   const isAuthorized = token === supabaseServiceKey || (cronSecret && token === cronSecret)
   if (!token || !isAuthorized) return jsonResponse({ error: 'Unauthorized' }, 401)
 
-  if (!riotApiKey) return jsonResponse({ error: 'RIOT_API_KEY not configured' }, 500)
+  if (!riotApiKeys.length) return jsonResponse({ error: 'RIOT_API_KEY(S) not configured' }, 500)
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
 

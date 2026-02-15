@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Search, RefreshCw, Coins, Shield, Loader2 } from 'lucide-vue-next'
+import { Search, RefreshCw, Coins, Shield, Loader2, Trash2 } from 'lucide-vue-next'
 import { useAdminStore } from '@renderer/stores/admin.store'
 import type { Profile } from '@renderer/types/database'
 
@@ -20,6 +20,17 @@ const editingPlanUser = ref<Profile | null>(null)
 const planType = ref('none')
 const planDays = ref(30)
 const planLoading = ref(false)
+const deleteError = ref('')
+
+async function handleDeleteUser(user: Profile): Promise<void> {
+  deleteError.value = ''
+  if (!confirm(`¿Eliminar al usuario "${user.display_name || user.id}" permanentemente? Esta acción no se puede deshacer.`)) return
+  const { error } = await admin.deleteUser(user.id)
+  if (error) {
+    deleteError.value = error
+    setTimeout(() => { deleteError.value = '' }, 5000)
+  }
+}
 
 function openAdjust(user: Profile): void {
   adjustingUser.value = user
@@ -80,6 +91,11 @@ onMounted(() => admin.fetchAllUsers())
       </button>
     </div>
 
+    <!-- Delete error banner -->
+    <div v-if="deleteError" class="p-2.5 rounded-lg text-xs bg-error/10 border border-error/30 text-error">
+      {{ deleteError }}
+    </div>
+
     <!-- Users Table -->
     <div class="rounded-xl bg-surface border border-border-default overflow-hidden">
       <table class="w-full">
@@ -133,6 +149,9 @@ onMounted(() => admin.fetchAllUsers())
                 </button>
                 <button class="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-accent hover:bg-accent/10 transition-colors" @click="openPlanEdit(user)">
                   <Shield class="w-3 h-3" /> Plan
+                </button>
+                <button class="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-error hover:bg-error/10 transition-colors" title="Eliminar usuario" @click="handleDeleteUser(user)">
+                  <Trash2 class="w-3 h-3" />
                 </button>
               </div>
             </td>
