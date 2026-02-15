@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { Download } from 'lucide-vue-next'
 import Sidebar from './Sidebar.vue'
 import Header from './Header.vue'
+import NotificationToast from '../NotificationToast.vue'
 
 const route = useRoute()
 
@@ -72,4 +73,5 @@ function installUpdate(): void {
       </main>
     </div>
   </div>
+  <NotificationToast />
 </template>

@@ -1,16 +1,14 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { supabase } from '@renderer/lib/supabase'
 import type { Rental, RentalMatch } from '@renderer/types/database'
+import { useNotificationsStore } from './notifications.store'
 
 export const useRentalsStore = defineStore('rentals', () => {
   const rentals = ref<Rental[]>([])
   const rentalMatches = ref<Map<string, RentalMatch[]>>(new Map())
   const loading = ref(false)
   const error = ref<string | null>(null)
-
-  const heartbeatRunning = ref(false)
-  let heartbeatTimer: ReturnType<typeof setInterval> | null = null
 
   const activeRentals = computed(() =>
     rentals.value.filter(r => r.status === 'active')
@@ -19,47 +17,6 @@ export const useRentalsStore = defineStore('rentals', () => {
   const pastRentals = computed(() =>
     rentals.value.filter(r => r.status !== 'active')
   )
-
-  // ── Heartbeat (observability only, does NOT release accounts) ──
-
-  async function sendHeartbeat(): Promise<void> {
-    try {
-      const { data } = await supabase.auth.getSession()
-      if (!data.session) {
-        stopHeartbeat()
-        return
-      }
-
-      const rentalId = activeRentals.value[0]?.id
-      await supabase.functions.invoke('heartbeat-ping', {
-        body: rentalId ? { rental_id: rentalId } : {}
-      })
-    } catch {
-      // best-effort only
-    }
-  }
-
-  function startHeartbeat(): void {
-    if (heartbeatTimer) return
-    heartbeatRunning.value = true
-    void sendHeartbeat()
-    heartbeatTimer = setInterval(() => {
-      void sendHeartbeat()
-    }, 60_000)
-  }
-
-  function stopHeartbeat(): void {
-    heartbeatRunning.value = false
-    if (heartbeatTimer) {
-      clearInterval(heartbeatTimer)
-      heartbeatTimer = null
-    }
-  }
-
-  function syncHeartbeat(): void {
-    if (activeRentals.value.length > 0) startHeartbeat()
-    else stopHeartbeat()
-  }
 
   // ── Data fetching ──
 
@@ -87,8 +44,6 @@ export const useRentalsStore = defineStore('rentals', () => {
       if (activeIds.length > 0) {
         await fetchRentalMatches(activeIds)
       }
-
-      syncHeartbeat()
     } finally {
       loading.value = false
     }
@@ -150,7 +105,6 @@ export const useRentalsStore = defineStore('rentals', () => {
       .eq('id', accountId)
 
     rentals.value.unshift(rental)
-    syncHeartbeat()
     return { error: null, rental }
   }
 
@@ -178,14 +132,14 @@ export const useRentalsStore = defineStore('rentals', () => {
       rentals.value[idx] = { ...rentals.value[idx], status: 'cancelled', ended_at: new Date().toISOString() }
     }
 
-    syncHeartbeat()
-
     return { error: null }
   }
 
   // ── Realtime subscriptions ──
 
   function subscribeToChanges(userId: string): void {
+    const notifications = useNotificationsStore()
+
     // Listen to rental changes
     supabase
       .channel('my-rentals')
@@ -197,13 +151,28 @@ export const useRentalsStore = defineStore('rentals', () => {
       }, (payload) => {
         const updated = payload.new as Rental
         const idx = rentals.value.findIndex(r => r.id === updated.id)
+
+        // Detect status transitions for notifications
         if (idx !== -1) {
-          rentals.value[idx] = updated
-        } else if (payload.eventType === 'INSERT') {
+          const prev = rentals.value[idx]
+          if (prev.status === 'active' && updated.status === 'completed') {
+            notifications.success(
+              'Alquiler completado',
+              `Usaste ${updated.matches_used}/${updated.matches_total} partidas. La cuenta fue liberada.`
+            )
+          } else if (prev.status === 'active' && updated.status === 'force_released') {
+            notifications.warning(
+              'Alquiler liberado por inactividad',
+              'Se aplicó un reembolso proporcional por las partidas no usadas.'
+            )
+          } else if (prev.status === 'active' && updated.status === 'cancelled') {
+            notifications.info('Alquiler cancelado', 'La cuenta fue liberada exitosamente.')
+          }
+
+        rentals.value[idx] = updated
+      } else if (payload.eventType === 'INSERT') {
           rentals.value.unshift(updated)
         }
-
-        syncHeartbeat()
       })
       .subscribe()
 
@@ -217,18 +186,25 @@ export const useRentalsStore = defineStore('rentals', () => {
       }, (payload) => {
         const newMatch = payload.new as RentalMatch
         // Only add if it belongs to one of our rentals
-        const belongsToUs = rentals.value.some(r => r.id === newMatch.rental_id)
-        if (!belongsToUs) return
+        const rental = rentals.value.find(r => r.id === newMatch.rental_id)
+        if (!rental) return
 
         const existing = rentalMatches.value.get(newMatch.rental_id) ?? []
         rentalMatches.value.set(newMatch.rental_id, [newMatch, ...existing])
         // Trigger reactivity
         rentalMatches.value = new Map(rentalMatches.value)
+
+        // Notify about the match
+        const champion = newMatch.champion || 'Desconocido'
+        const result = newMatch.win ? '✓ Victoria' : '✗ Derrota'
+        const matchCount = existing.length + 1
+        notifications.info(
+          `Partida ${matchCount}/${rental.matches_total} detectada`,
+          `${champion} — ${result} (${Math.floor((newMatch.duration_secs || 0) / 60)}min)`
+        )
       })
       .subscribe()
   }
-
-  watch(activeRentals, () => syncHeartbeat(), { deep: false })
 
   return {
     rentals,

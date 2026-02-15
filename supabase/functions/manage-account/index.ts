@@ -1,9 +1,9 @@
 // Supabase Edge Function: manage-account
 // Admin CRUD for LoL accounts with AES-256-GCM password encryption
-// Deploy: supabase functions deploy manage-account
+// Deploy: supabase functions deploy manage-account --no-verify-jwt
 //
-// POST   → Create account (encrypts password)
-// PUT    → Update account (re-encrypts password if provided)
+// POST   → Create account (encrypts password, resolves PUUID from Riot API)
+// PUT    → Update account (re-encrypts password if provided, re-resolves PUUID if riot_username/riot_tag changed)
 // DELETE → Delete account
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
@@ -11,6 +11,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const ENCRYPTION_KEY = Deno.env.get('ENCRYPTION_KEY')!
+const riotApiKey = Deno.env.get('RIOT_API_KEY') || ''
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -39,13 +40,39 @@ async function encryptPassword(plaintext: string): Promise<string> {
   return btoa(String.fromCharCode(...combined))
 }
 
-// ─── Helpers ───
+// ── Helpers ──
 
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
   })
+}
+
+/** Resolve PUUID from Riot Account API using gameName + tagLine */
+async function resolvePuuid(gameName: string, tagLine: string, server: string): Promise<string | null> {
+  if (!riotApiKey) return null
+  // Route to correct regional endpoint
+  const regionMap: Record<string, string> = {
+    NA: 'americas', LAN: 'americas', LAS: 'americas', BR: 'americas', OCE: 'americas',
+    EUW: 'europe', EUNE: 'europe', TR: 'europe', RU: 'europe',
+    KR: 'asia', JP: 'asia',
+    PH: 'sea', SG: 'sea', TW: 'sea', TH: 'sea', VN: 'sea'
+  }
+  const region = regionMap[server] || 'americas'
+  const url = `https://${region}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`
+  try {
+    const res = await fetch(url, { headers: { 'X-Riot-Token': riotApiKey } })
+    if (!res.ok) {
+      console.error(`Riot API ${res.status} resolving puuid for ${gameName}#${tagLine}`)
+      return null
+    }
+    const data = await res.json()
+    return (data?.puuid as string) ?? null
+  } catch (err) {
+    console.error('resolvePuuid error:', err)
+    return null
+  }
 }
 
 async function verifyAdmin(req: Request): Promise<{ userId: string } | Response> {
@@ -85,9 +112,38 @@ Deno.serve(async (req) => {
   if (authResult instanceof Response) return authResult
 
   try {
-    // ─── CREATE ───
+    // ─── CREATE or RESOLVE PUUIDs ───
     if (req.method === 'POST') {
       const body = await req.json()
+
+      // ── Bulk resolve PUUIDs for all accounts missing puuid ──
+      if (body.action === 'resolve-puuids') {
+        const { data: accounts, error: fetchErr } = await supabase
+          .from('accounts')
+          .select('id, riot_username, riot_tag, server')
+          .is('puuid', null)
+
+        if (fetchErr) return jsonResponse({ error: fetchErr.message }, 500)
+
+        let resolved = 0
+        let failed = 0
+        for (const acc of (accounts ?? [])) {
+          if (!acc.riot_username || !acc.riot_tag) { failed++; continue }
+          const puuid = await resolvePuuid(acc.riot_username, acc.riot_tag, acc.server || 'LAN')
+          if (puuid) {
+            await supabase.from('accounts').update({ puuid }).eq('id', acc.id)
+            resolved++
+          } else {
+            failed++
+          }
+          // Riot API rate limit: be safe
+          await new Promise((r) => setTimeout(r, 150))
+        }
+
+        return jsonResponse({ success: true, resolved, failed, total: (accounts ?? []).length })
+      }
+
+      // ── Regular CREATE ──
       const {
         name,
         riot_username,
@@ -108,6 +164,9 @@ Deno.serve(async (req) => {
 
       const encrypted = await encryptPassword(password)
 
+      // Resolve PUUID from Riot API
+      const puuid = await resolvePuuid(riot_username, riot_tag, server || 'LAN')
+
       const { data, error } = await supabase
         .from('accounts')
         .insert({
@@ -121,7 +180,8 @@ Deno.serve(async (req) => {
           elo_division: elo_division ?? null,
           lp: lp ?? 0,
           status: status || 'active',
-          notes: notes || null
+          notes: notes || null,
+          ...(puuid ? { puuid } : {})
         })
         .select('id, name, riot_username, riot_tag, server, elo, elo_division, lp, status, is_banned, ban_type, current_rental_id, notes, created_at, updated_at')
         .single()
@@ -220,6 +280,22 @@ Deno.serve(async (req) => {
       delete updates.id
       delete updates.created_at
       delete updates.updated_at
+
+      // Re-resolve PUUID if riot_username or riot_tag changed
+      if (updates.riot_username || updates.riot_tag) {
+        const { data: current } = await supabase
+          .from('accounts')
+          .select('riot_username, riot_tag, server')
+          .eq('id', id)
+          .single()
+        const gameName = (updates.riot_username as string) || current?.riot_username || ''
+        const tagLine = (updates.riot_tag as string) || current?.riot_tag || ''
+        const srv = (updates.server as string) || current?.server || 'LAN'
+        if (gameName && tagLine) {
+          const puuid = await resolvePuuid(gameName, tagLine, srv)
+          if (puuid) updates.puuid = puuid
+        }
+      }
 
       const { data, error } = await supabase
         .from('accounts')

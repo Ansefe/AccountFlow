@@ -74,7 +74,6 @@ function navigate(path: string): void {
         <Hexagon class="w-5 h-5 text-accent" :stroke-width="2" />
       </div>
       <span class="text-base font-bold text-text-primary">AccountFlow</span>
-      <span class="text-[10px] text-text-muted font-medium ml-0.5">H4</span>
     </div>
 
     <!-- Main Navigation -->

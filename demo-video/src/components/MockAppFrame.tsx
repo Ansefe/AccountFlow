@@ -138,7 +138,6 @@ export const MockAppFrame: React.FC<MockAppFrameProps> = ({
             >
               AccountFlow
             </span>
-            <span style={{ fontSize: 9, color: colors.textMuted, marginLeft: 2 }}>H4</span>
           </div>
 
           {/* Main nav */}

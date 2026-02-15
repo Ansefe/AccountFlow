@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Plus, RefreshCw, Pencil, Trash2, Unlock, Search, Loader2 } from 'lucide-vue-next'
+import { Plus, RefreshCw, Pencil, Trash2, Unlock, Search, Loader2, Zap } from 'lucide-vue-next'
 import { useAdminStore } from '@renderer/stores/admin.store'
 
 const admin = useAdminStore()
@@ -10,6 +10,8 @@ const editingId = ref<string | null>(null)
 const searchQuery = ref('')
 const saving = ref(false)
 const errorMsg = ref('')
+const resolvingPuuids = ref(false)
+const puuidMsg = ref('')
 
 // Form state
 const form = ref({
@@ -103,6 +105,21 @@ async function handleForceRelease(accountId: string, rentalId: string): Promise<
   await admin.forceReleaseAccount(accountId, rentalId)
 }
 
+async function handleResolvePuuids(): Promise<void> {
+  resolvingPuuids.value = true
+  puuidMsg.value = ''
+  const result = await admin.resolvePuuids()
+  if (result.error) {
+    puuidMsg.value = `Error: ${result.error}`
+  } else if (result.total === 0) {
+    puuidMsg.value = 'Todas las cuentas ya tienen PUUID.'
+  } else {
+    puuidMsg.value = `Resueltos: ${result.resolved}/${result.total}${result.failed ? ` (${result.failed} fallidos)` : ''}`
+  }
+  resolvingPuuids.value = false
+  setTimeout(() => { puuidMsg.value = '' }, 6000)
+}
+
 const filtered = () => {
   const q = searchQuery.value.toLowerCase()
   if (!q) return admin.accounts
@@ -123,6 +140,15 @@ onMounted(() => admin.fetchAllAccounts())
         <span class="text-xs text-text-muted">{{ admin.accounts.length }} cuentas</span>
       </div>
       <div class="flex gap-2">
+        <button
+          :disabled="resolvingPuuids"
+          class="flex items-center gap-2 px-3 py-2 rounded-lg bg-warning/10 border border-warning/30 text-xs font-medium text-warning hover:bg-warning/20 transition-colors disabled:opacity-50"
+          @click="handleResolvePuuids"
+        >
+          <Loader2 v-if="resolvingPuuids" class="w-3.5 h-3.5 animate-spin" />
+          <Zap v-else class="w-3.5 h-3.5" />
+          Resolver PUUIDs
+        </button>
         <button class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface border border-border-default text-xs font-medium text-text-secondary hover:bg-surface-hover transition-colors" @click="admin.fetchAllAccounts()">
           <RefreshCw class="w-3.5 h-3.5" />
           Recargar
@@ -132,6 +158,11 @@ onMounted(() => admin.fetchAllAccounts())
           Agregar Cuenta
         </button>
       </div>
+    </div>
+
+    <!-- PUUID resolve feedback -->
+    <div v-if="puuidMsg" class="p-2.5 rounded-lg text-xs" :class="puuidMsg.startsWith('Error') ? 'bg-error/10 border border-error/30 text-error' : 'bg-success/10 border border-success/30 text-success'">
+      {{ puuidMsg }}
     </div>
 
     <!-- Add/Edit Form -->

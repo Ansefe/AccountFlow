@@ -126,6 +126,18 @@ export const useAdminStore = defineStore('admin', () => {
     return { error: null }
   }
 
+  async function resolvePuuids(): Promise<{ resolved: number; failed: number; total: number; error: string | null }> {
+    const { data, error } = await supabase.functions.invoke('manage-account', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'resolve-puuids' }),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    if (error) return { resolved: 0, failed: 0, total: 0, error: error.message }
+    if (data?.error) return { resolved: 0, failed: 0, total: 0, error: data.error }
+    await fetchAllAccounts()
+    return { resolved: data.resolved ?? 0, failed: data.failed ?? 0, total: data.total ?? 0, error: null }
+  }
+
   // Users management
   async function fetchAllUsers(): Promise<void> {
     loading.value = true
@@ -182,6 +194,7 @@ export const useAdminStore = defineStore('admin', () => {
     updateAccount,
     deleteAccount,
     forceReleaseAccount,
+    resolvePuuids,
     fetchAllUsers,
     adjustCredits,
     updateUserPlan,
