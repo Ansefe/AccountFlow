@@ -223,9 +223,15 @@ Deno.serve(async (req) => {
     const tracked = trackedByRental.get(rental.id) ?? new Set()
     const newMatchIds = matchIds.filter((id) => !tracked.has(id))
 
+    // Cap to remaining quota: only process matches up to the rental limit.
+    // Riot returns newest-first; reverse so we process chronologically (oldest first)
+    // ensuring the earliest matches are the ones that count.
+    const remaining = rental.matches_total - rental.matches_used
+    const cappedMatchIds = newMatchIds.reverse().slice(0, Math.max(0, remaining))
+
     let matchesAdded = 0
 
-    for (const matchId of newMatchIds) {
+    for (const matchId of cappedMatchIds) {
       // Fetch match detail for enrichment
       const detail = await fetchMatchDetailForPuuid(matchId, region, acc.puuid)
       if (!detail) continue

@@ -16,7 +16,7 @@
  */
 
 import { execSync, spawn } from 'child_process'
-import { existsSync, readFileSync, unlinkSync, rmSync, readdirSync } from 'fs'
+import { existsSync, readFileSync, unlinkSync, rmSync } from 'fs'
 import { dirname, join, resolve as pathResolve } from 'path'
 import https from 'https'
 
